@@ -1,7 +1,7 @@
-import 'ts-node/register/transpile-only';
 import { HardhatUserConfig } from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
 import * as dotenv from 'dotenv';
+import 'ts-node/register/transpile-only';
 
 dotenv.config();
 

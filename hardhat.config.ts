@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
 import * as dotenv from 'dotenv';
+import 'ts-node/register';
 
 dotenv.config();
 
@@ -30,6 +31,15 @@ const config: HardhatUserConfig = {
         apiKey: {
             base: process.env.BASESCAN_API_KEY || ''
         }
+    },
+    paths: {
+        sources: "./contracts",
+        tests: "./test",
+        cache: "./cache",
+        artifacts: "./artifacts"
+    },
+    mocha: {
+        timeout: 40000
     }
 };
 
