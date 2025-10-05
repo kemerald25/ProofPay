@@ -40,7 +40,13 @@ async function main() {
         fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(`${dir}/addresses.json`, JSON.stringify(deploymentInfo, null, 2));
+
+    // Copy the artifact
+    const artifact = fs.readFileSync('./artifacts/src/contracts/ProofPayEscrow.sol/ProofPayEscrow.json', 'utf-8');
+    fs.writeFileSync(`${dir}/ProofPayEscrow.json`, artifact);
+
     console.log(`\nDeployment info saved to ${dir}/addresses.json`);
+    console.log(`Contract artifact saved to ${dir}/ProofPayEscrow.json`);
     console.log('\n⚠️ IMPORTANT: Update your .env file with:');
     console.log(`ESCROW_CONTRACT_ADDRESS=${escrowAddress}`);
     console.log(`USDC_CONTRACT_ADDRESS=${USDC_ADDRESS}`);
