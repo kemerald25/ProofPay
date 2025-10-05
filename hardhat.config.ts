@@ -1,7 +1,7 @@
 import { HardhatUserConfig } from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
 import * as dotenv from 'dotenv';
-import 'ts-node/register';
+import 'ts-node/register/transpile-only';
 
 dotenv.config();
 
@@ -40,6 +40,9 @@ const config: HardhatUserConfig = {
     },
     mocha: {
         timeout: 40000
+    },
+    'ts-node': {
+        project: 'tsconfig.hardhat.json'
     }
 };
 
