@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { Sentry } from '@/config/sentry';
 import EscrowService from '@/services/escrow.service';
@@ -8,34 +9,6 @@ import UserService from '@/services/user.service';
 // Store messages to be sent instead of actually sending them
 let messageQueue: any[] = [];
 
-// Mock the WhatsAppService to queue messages instead of sending
-jest.spyOn(WhatsAppService, 'sendMessage').mockImplementation(async (to: string, body: string) => {
-    console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
-    messageQueue.push({ to, body });
-    return `simulated_message_sid_${Date.now()}`;
-});
-jest.spyOn(WhatsAppService, 'sendHelpMessage').mockImplementation(async (to: string) => {
-    const helpText = `🤖 *BasePay Help*
-
-*CREATE ESCROW (Seller):*
-+[buyer-phone] [amount] [item]
-Example: +1234567890 50 iPhone case
-
-*CONFIRM DELIVERY (Buyer):*
-confirm [escrow-id]
-
-*RAISE DISPUTE:*
-dispute [escrow-id]
-
-*MY TRANSACTIONS:*
-history
-
-Need more help? Visit our website.`;
-    messageQueue.push({ to, body: helpText });
-    return `simulated_message_sid_${Date.now()}`;
-});
-
-
 // Handles incoming messages from the simulator UI
 export async function POST(req: NextRequest) {
   messageQueue = []; // Clear queue for each request
@@ -43,9 +16,35 @@ export async function POST(req: NextRequest) {
 
   const from = body.from;
   const message = (body.message as string).toLowerCase().trim();
-  const [command, ...args] = message.split(' ');
+  
+  // Temporarily override the real sendMessage to capture replies
+  const originalSendMessage = WhatsAppService.sendMessage;
+  WhatsAppService.sendMessage = async (to: string, body: string) => {
+      console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
+      messageQueue.push({ to, body });
+      return `simulated_message_sid_${Date.now()}`;
+  };
 
   try {
+    await handleIncomingMessage(from, message);
+  } catch (error: any) {
+    Sentry.captureException(error);
+    messageQueue.push({to: from, body: `An error occurred: ${error.message}`});
+    // Restore the original function even if there's an error
+    WhatsAppService.sendMessage = originalSendMessage;
+    return NextResponse.json({ replies: messageQueue }, { status: 500 });
+  }
+
+  // Restore the original function after processing
+  WhatsAppService.sendMessage = originalSendMessage;
+
+  return NextResponse.json({ replies: messageQueue });
+}
+
+
+async function handleIncomingMessage(from: string, message: string) {
+    const [command, ...args] = message.split(' ');
+
     if (message.startsWith('+')) {
         await handleCreate(from, message);
     } else {
@@ -63,17 +62,10 @@ export async function POST(req: NextRequest) {
                 await handleHistory(from);
                 break;
             default:
-                messageQueue.push({to: from, body: 'Sorry, I didn\'t understand that. Reply "help" for a list of commands.'});
+                await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
                 break;
         }
     }
-  } catch (error: any) {
-    Sentry.captureException(error);
-    messageQueue.push({to: from, body: `An error occurred: ${error.message}`});
-    return NextResponse.json({ replies: messageQueue }, { status: 500 });
-  }
-
-  return NextResponse.json({ replies: messageQueue });
 }
 
 
@@ -114,7 +106,10 @@ async function handleDispute(from: string, escrowId: string) {
 
 async function handleHistory(from: string) {
     const user = await UserService.getUserByPhone(from);
-    if (!user) throw new Error("User not found.");
+    if (!user) {
+      await WhatsAppService.sendMessage(from, "User not found. Please create an escrow first to register.");
+      return;
+    }
 
     const escrows = await EscrowService.getUserEscrows(user.id);
     
