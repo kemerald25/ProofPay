@@ -9,43 +9,48 @@ import UserService from '@/services/user.service';
 // Store messages to be sent instead of actually sending them
 let messageQueue: any[] = [];
 
-// Handles incoming messages from the simulator UI
-export async function POST(req: NextRequest) {
-  messageQueue = []; // Clear queue for each request
-  const body = await req.json();
-
-  const from = body.from;
-  const message = (body.message as string).toLowerCase().trim();
-  
-  // Temporarily override the real sendMessage to capture replies
+// Temporarily override the real sendMessage to capture replies for the simulator
+function captureWhatsAppMessages() {
   const originalSendMessage = WhatsAppService.sendMessage;
   WhatsAppService.sendMessage = async (to: string, body: string) => {
       console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
       messageQueue.push({ to, body });
       return `simulated_message_sid_${Date.now()}`;
   };
+  return originalSendMessage;
+}
+
+
+// Handles incoming messages from the simulator UI
+export async function POST(req: NextRequest) {
+  messageQueue = []; // Clear queue for each request
+  const body = await req.json();
+
+  const from = body.from;
+  const message = (body.message as string).trim();
+  
+  const originalSendMessage = captureWhatsAppMessages();
 
   try {
     await handleIncomingMessage(from, message);
   } catch (error: any) {
     Sentry.captureException(error);
     messageQueue.push({to: from, body: `An error occurred: ${error.message}`});
-    // Restore the original function even if there's an error
+  } finally {
+    // ALWAYS restore the original function
     WhatsAppService.sendMessage = originalSendMessage;
-    return NextResponse.json({ replies: messageQueue }, { status: 500 });
   }
-
-  // Restore the original function after processing
-  WhatsAppService.sendMessage = originalSendMessage;
 
   return NextResponse.json({ replies: messageQueue });
 }
 
 
 async function handleIncomingMessage(from: string, message: string) {
-    const [command, ...args] = message.split(' ');
+    const lowerCaseMessage = message.toLowerCase();
+    const [command, ...args] = lowerCaseMessage.split(' ');
 
     if (message.startsWith('+')) {
+        // The original message is needed here for parsing phone, amount, desc
         await handleCreate(from, message);
     } else {
         switch (command) {
@@ -71,11 +76,14 @@ async function handleIncomingMessage(from: string, message: string) {
 
 async function handleCreate(from: string, message: string) {
     const parts = message.split(' ');
+    if (parts.length < 3) {
+      throw new Error('Invalid format. Use: +<buyer-phone> <amount> <item>');
+    }
     const buyerPhone = parts[0];
     const amount = parseFloat(parts[1]);
     const description = parts.slice(2).join(' ');
 
-    if (!buyerPhone || !amount || !description) {
+    if (!buyerPhone.startsWith('+') || isNaN(amount) || !description) {
         throw new Error('Invalid format. Use: +<buyer-phone> <amount> <item>');
     }
 
