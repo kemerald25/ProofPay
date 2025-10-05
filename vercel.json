@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "crons": [
+    {
+      "path": "/api/jobs/auto-release",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/jobs/payment-monitor",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/jobs/delivery-reminder",
+      "schedule": "0 10 * * *"
+    }
+  ]
+}

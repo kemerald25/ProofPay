@@ -1,0 +1,7 @@
+{
+  "escrowAddress": "0x...",
+  "usdcAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "feeCollector": "0x...",
+  "network": "base",
+  "deployedAt": "2024-01-01T00:00:00.000Z"
+}
