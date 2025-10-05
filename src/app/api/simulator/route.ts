@@ -3,6 +3,7 @@ import { Sentry } from '@/config/sentry';
 import EscrowService from '@/services/escrow.service';
 import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
+import UserService from '@/services/user.service';
 
 // Store messages to be sent instead of actually sending them
 let messageQueue: any[] = [];
@@ -113,7 +114,7 @@ async function handleDispute(from: string, escrowId: string) {
 }
 
 async function handleHistory(from: string) {
-    const user = await EscrowService.getEscrow(from);
+    const user = await UserService.getUserByPhone(from);
     if (!user) throw new Error("User not found.");
 
     const escrows = await EscrowService.getUserEscrows(user.id);

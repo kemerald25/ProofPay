@@ -4,9 +4,10 @@ import { Sentry } from '@/config/sentry';
 import EscrowService from '@/services/escrow.service';
 import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
+import UserService from '@/services/user.service';
 
 async function handleHistory(from: string) {
-    const user = await EscrowService.getEscrow(from);
+    const user = await UserService.getUserByPhone(from);
     if (!user) throw new Error("User not found.");
 
     const escrows = await EscrowService.getUserEscrows(user.id);
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
         if (message.startsWith('+')) {
             await handleCreate(from, message);
         } else {
-            await WhatsAppService.sendMessage(from, 'Sorry, I didn\'t understand that. Reply "help" for a list of commands.');
+            await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
         }
         break;
     }
