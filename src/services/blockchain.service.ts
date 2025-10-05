@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 // Correctly import the full artifact which includes the ABI
-import EscrowArtifact from '../contracts/ProofPayEscrow.sol/ProofPayEscrow.json';
+import EscrowArtifact from '../../artifacts/src/contracts/ProofPayEscrow.sol/ProofPayEscrow.json';
 
 const EscrowABI = EscrowArtifact.abi;
 
