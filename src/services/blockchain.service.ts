@@ -3,15 +3,13 @@ import { ethers } from 'ethers';
 import EscrowABI from '../contracts/escrow.abi.json';
 
 class BlockchainService {
-    private provider: ethers.JsonRpcProvider;
-    private wallet: ethers.Wallet;
-    private escrowContract: ethers.Contract;
+    private provider: ethers.JsonRpcProvider | null = null;
+    private wallet: ethers.Wallet | null = null;
+    private escrowContract: ethers.Contract | null = null;
     
     constructor() {
         if (!process.env.BASE_RPC_URL || !process.env.PRIVATE_KEY || !process.env.ESCROW_CONTRACT_ADDRESS) {
             console.warn("Blockchain environment variables not set. BlockchainService will not be initialized.");
-            // @ts-ignore
-            this.provider = this.wallet = this.escrowContract = null;
             return;
         }
         this.provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
@@ -23,11 +21,16 @@ class BlockchainService {
         );
     }
     
+    private isInitialized(): boolean {
+        return !!this.provider && !!this.wallet && !!this.escrowContract;
+    }
+
     async createEscrow(
         buyerAddress: string,
         sellerAddress: string,
         amount: string // in USDC (6 decimals)
     ): Promise<{ escrowId: string; txHash: string }> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const amountInWei = ethers.parseUnits(amount, 6); // USDC has 6 decimals
             
@@ -40,7 +43,7 @@ class BlockchainService {
             const receipt = await tx.wait();
             
             const event = receipt.logs.find((log: any) => 
-                log.topics[0] === this.escrowContract.interface.getEvent('EscrowCreated').topicHash
+                log.topics[0] === this.escrowContract!.interface.getEvent('EscrowCreated').topicHash
             );
             
             const escrowId = event.topics[1]; 
@@ -57,6 +60,7 @@ class BlockchainService {
     }
     
     async checkEscrowStatus(escrowId: string): Promise<any> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const escrow = await this.escrowContract.getEscrow(escrowId);
             
@@ -76,6 +80,7 @@ class BlockchainService {
     }
     
     async releaseFunds(escrowId: string): Promise<string> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const tx = await this.escrowContract.releaseFunds(escrowId);
             const receipt = await tx.wait();
@@ -87,6 +92,7 @@ class BlockchainService {
     }
 
     async fundEscrow(escrowId: string): Promise<string> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const tx = await this.escrowContract.fundEscrow(escrowId);
             const receipt = await tx.wait();
@@ -98,6 +104,7 @@ class BlockchainService {
     }
     
     async raiseDispute(escrowId: string): Promise<string> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const tx = await this.escrowContract.raiseDispute(escrowId);
             const receipt = await tx.wait();
@@ -112,6 +119,7 @@ class BlockchainService {
         escrowId: string,
         buyerPercentage: number
     ): Promise<string> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const tx = await this.escrowContract.resolveDispute(escrowId, buyerPercentage);
             const receipt = await tx.wait();
@@ -123,6 +131,7 @@ class BlockchainService {
     }
     
     async checkAutoRelease(escrowId: string): Promise<boolean> {
+        if (!this.isInitialized() || !this.escrowContract) return false;
         try {
             const escrow = await this.escrowContract.getEscrow(escrowId);
             const now = Math.floor(Date.now() / 1000);
@@ -133,6 +142,7 @@ class BlockchainService {
     }
     
     async executeAutoRelease(escrowId: string): Promise<string> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const tx = await this.escrowContract.autoRelease(escrowId);
             const receipt = await tx.wait();

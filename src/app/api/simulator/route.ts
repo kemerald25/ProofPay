@@ -6,85 +6,17 @@ import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
 import UserService from '@/services/user.service';
 
-// Store messages to be sent instead of actually sending them
-let messageQueue: any[] = [];
-
-// Temporarily override the real sendMessage to capture replies for the simulator
-function captureWhatsAppMessages() {
-  const originalSendMessage = WhatsAppService.sendMessage;
-  WhatsAppService.sendMessage = async (to: string, body: string) => {
-      console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
-      messageQueue.push({ to, body });
-      return `simulated_message_sid_${Date.now()}`;
-  };
-  return originalSendMessage;
-}
-
-
-// Handles incoming messages from the simulator UI
-export async function POST(req: NextRequest) {
-  messageQueue = []; // Clear queue for each request
-  const body = await req.json();
-
-  const from = body.from;
-  const message = (body.message as string).trim();
-  
-  const originalSendMessage = captureWhatsAppMessages();
-
-  try {
-    await handleIncomingMessage(from, message);
-  } catch (error: any) {
-    Sentry.captureException(error);
-    messageQueue.push({to: from, body: `An error occurred: ${error.message}`});
-  } finally {
-    // ALWAYS restore the original function
-    WhatsAppService.sendMessage = originalSendMessage;
-  }
-
-  return NextResponse.json({ replies: messageQueue });
-}
-
-
-async function handleIncomingMessage(from: string, message: string) {
-    const lowerCaseMessage = message.toLowerCase();
-    const [command, ...args] = lowerCaseMessage.split(' ');
-
-    if (message.startsWith('+')) {
-        // The original message is needed here for parsing phone, amount, desc
-        await handleCreate(from, message);
-    } else {
-        switch (command) {
-            case 'confirm':
-                await handleConfirm(from, args[0]);
-                break;
-            case 'dispute':
-                await handleDispute(from, args[0]);
-                break;
-            case 'help':
-                await WhatsAppService.sendHelpMessage(from);
-                break;
-            case 'history':
-                await handleHistory(from);
-                break;
-            default:
-                await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
-                break;
-        }
-    }
-}
-
-
 async function handleCreate(from: string, message: string) {
-    const parts = message.split(' ');
-    if (parts.length < 3) {
-      throw new Error('Invalid format. Use: +<buyer-phone> <amount> <item>');
+    const parts = message.trim().split(' ');
+    if (parts.length < 3 || !parts[0].startsWith('+')) {
+      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item>');
     }
     const buyerPhone = parts[0];
     const amount = parseFloat(parts[1]);
     const description = parts.slice(2).join(' ');
 
-    if (!buyerPhone.startsWith('+') || isNaN(amount) || !description) {
-        throw new Error('Invalid format. Use: +<buyer-phone> <amount> <item>');
+    if (isNaN(amount) || !description) {
+        throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item>');
     }
 
     const escrowData = await EscrowService.createEscrow({
@@ -133,4 +65,64 @@ async function handleHistory(from: string) {
     });
     
     await WhatsAppService.sendMessage(from, historyMessage);
+}
+
+async function handleIncomingMessage(from: string, message: string) {
+    const lowerCaseMessage = message.trim().toLowerCase();
+    const [command, ...args] = lowerCaseMessage.split(' ');
+
+    if (message.trim().startsWith('+')) {
+        await handleCreate(from, message.trim());
+    } else {
+        switch (command) {
+            case 'confirm':
+                await handleConfirm(from, args[0]);
+                break;
+            case 'dispute':
+                await handleDispute(from, args[0]);
+                break;
+            case 'help':
+                await WhatsAppService.sendHelpMessage(from);
+                break;
+            case 'history':
+                await handleHistory(from);
+                break;
+            default:
+                await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
+                break;
+        }
+    }
+}
+
+// Handles incoming messages from the simulator UI
+export async function POST(req: NextRequest) {
+  const messageQueue: any[] = [];
+  const originalSendMessage = WhatsAppService.sendMessage;
+  
+  // Intercept messages for this request only
+  WhatsAppService.sendMessage = async (to: string, body: string) => {
+      console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
+      messageQueue.push({ to, body });
+      return `simulated_message_sid_${Date.now()}`;
+  };
+
+  try {
+    const body = await req.json();
+    const from = body.from;
+    const message = (body.message as string);
+    
+    await handleIncomingMessage(from, message);
+    
+    // Restore original function
+    WhatsAppService.sendMessage = originalSendMessage;
+    return NextResponse.json({ replies: messageQueue });
+
+  } catch (error: any) {
+    console.error("Simulator API Error:", error);
+    Sentry.captureException(error);
+    
+    // Restore original function even on error
+    WhatsAppService.sendMessage = originalSendMessage;
+    return NextResponse.json({ replies: [{to: req.json().from, body: `An error occurred: ${error.message}`}] });
+  }
 }
