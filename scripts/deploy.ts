@@ -1,4 +1,4 @@
-import { ethers } from 'hardhat';
+import { ethers, network } from 'hardhat';
 import fs from 'fs';
 
 async function main() {
@@ -7,8 +7,18 @@ async function main() {
     console.log('Deploying contracts with account:', deployer.address);
     console.log('Account balance:', (await deployer.provider.getBalance(deployer.address)).toString());
     
-    // USDC address on Base mainnet
-    const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+    const usdcAddresses = {
+        'base': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e' // USDC on Base Sepolia
+    };
+
+    const networkName = network.name as keyof typeof usdcAddresses;
+
+    if (!usdcAddresses[networkName]) {
+        throw new Error(`USDC address not defined for network: ${networkName}`);
+    }
+
+    const USDC_ADDRESS = usdcAddresses[networkName];
     
     // Fee collector address (your wallet)
     const FEE_COLLECTOR = deployer.address;
@@ -22,6 +32,7 @@ async function main() {
     const escrowAddress = await escrow.getAddress();
     
     console.log('ProofPayEscrow deployed to:', escrowAddress);
+    console.log('Network:', networkName);
     console.log('USDC address:', USDC_ADDRESS);
     console.log('Fee collector:', FEE_COLLECTOR);
     
@@ -30,20 +41,21 @@ async function main() {
         escrowAddress,
         usdcAddress: USDC_ADDRESS,
         feeCollector: FEE_COLLECTOR,
-        network: 'base',
+        network: networkName,
         deployedAt: new Date().toISOString()
     };
 
-    if (!fs.existsSync('./src/contracts')) {
-        fs.mkdirSync('./src/contracts', { recursive: true });
+    const dir = './src/contracts';
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
     }
     
     fs.writeFileSync(
-        './src/contracts/addresses.json',
+        `${dir}/addresses.json`,
         JSON.stringify(deploymentInfo, null, 2)
     );
     
-    console.log('\nDeployment info saved to src/contracts/addresses.json');
+    console.log(`\nDeployment info saved to ${dir}/addresses.json`);
     console.log('\n⚠️ IMPORTANT: Update your .env file with:');
     console.log(`ESCROW_CONTRACT_ADDRESS=${escrowAddress}`);
     console.log(`USDC_CONTRACT_ADDRESS=${USDC_ADDRESS}`);
