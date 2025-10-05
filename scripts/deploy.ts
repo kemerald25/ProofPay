@@ -1,5 +1,6 @@
 import { ethers, network } from 'hardhat';
 import fs from 'fs';
+import 'ts-node/register';
 
 async function main() {
     const [deployer] = await ethers.getSigners();
