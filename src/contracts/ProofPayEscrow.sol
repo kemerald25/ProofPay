@@ -60,7 +60,7 @@ contract ProofPayEscrow is ReentrancyGuard, Ownable {
     event DisputeResolved(bytes32 indexed escrowId, uint256 buyerAmount, uint256 sellerAmount);
     event AutoReleaseExecuted(bytes32 indexed escrowId);
     
-    constructor(address _usdcAddress, address _feeCollector) {
+    constructor(address _usdcAddress, address _feeCollector) Ownable(msg.sender) {
         require(_usdcAddress != address(0), "Invalid USDC address");
         require(_feeCollector != address(0), "Invalid fee collector");
         USDC = IERC20(_usdcAddress);
