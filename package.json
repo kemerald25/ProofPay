@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "deploy:sepolia": "npx hardhat run scripts/deploy.js --network base-sepolia"
+    "compile": "npx hardhat compile",
+    "deploy:sepolia": "npm run compile && npx hardhat run scripts/deploy.js --network base-sepolia"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "^1.20.0",
