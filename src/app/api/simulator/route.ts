@@ -39,7 +39,7 @@ async function handleCreate(from: string, message: string) {
         sellerWallet: sellerWallet || '0x000000000000000000000000000000000000dEaD' // Placeholder for simulator
     });
     
-    await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowService, buyerPhone });
+    await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowData, buyerPhone });
     await WhatsAppService.sendPaymentRequestToBuyer(buyerPhone, escrowData);
 }
 
