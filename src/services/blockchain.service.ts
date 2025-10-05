@@ -46,7 +46,12 @@ class BlockchainService {
                 log.topics[0] === this.escrowContract!.interface.getEvent('EscrowCreated').topicHash
             );
             
-            const escrowId = event.topics[1]; 
+            if (!event) {
+                throw new Error("EscrowCreated event not found");
+            }
+            
+            const parsedLog = this.escrowContract.interface.parseLog(event);
+            const escrowId = parsedLog.args.escrowId;
             
             return {
                 escrowId,
