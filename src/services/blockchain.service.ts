@@ -1,6 +1,8 @@
 import { ethers } from 'ethers';
-// Assuming ABI is stored in a JSON file. You'll need to generate this.
-import EscrowABI from '../contracts/escrow.abi.json';
+// Correctly import the full artifact which includes the ABI
+import EscrowArtifact from '../contracts/ProofPayEscrow.sol/ProofPayEscrow.json';
+
+const EscrowABI = EscrowArtifact.abi;
 
 class BlockchainService {
     private provider: ethers.JsonRpcProvider | null = null;
@@ -41,17 +43,27 @@ class BlockchainService {
             );
             
             const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new Error("Transaction receipt not found");
+            }
             
-            const event = receipt.logs.find((log: any) => 
-                log.topics[0] === this.escrowContract!.interface.getEvent('EscrowCreated').topicHash
-            );
+            const event = (receipt.logs as any[]).find((log) => {
+                try {
+                    const parsedLog = this.escrowContract!.interface.parseLog(log);
+                    return parsedLog?.name === "EscrowCreated";
+                } catch (e) {
+                    // This log is not from our contract, ignore
+                    return false;
+                }
+            });
             
             if (!event) {
                 throw new Error("EscrowCreated event not found");
             }
             
             const parsedLog = this.escrowContract.interface.parseLog(event);
-            const escrowId = parsedLog.args.escrowId;
+            const escrowId = parsedLog!.args.escrowId;
             
             return {
                 escrowId,
@@ -73,7 +85,7 @@ class BlockchainService {
                 buyer: escrow.buyer,
                 seller: escrow.seller,
                 amount: ethers.formatUnits(escrow.amount, 6),
-                status: this.getStatusString(escrow.status),
+                status: this.getStatusString(Number(escrow.status)),
                 autoReleaseTime: new Date(Number(escrow.autoReleaseTime) * 1000),
                 disputeRaised: escrow.disputeRaised
             };
@@ -140,7 +152,7 @@ class BlockchainService {
         try {
             const escrow = await this.escrowContract.getEscrow(escrowId);
             const now = Math.floor(Date.now() / 1000);
-            return Number(escrow.autoReleaseTime) <= now && escrow.status === 1; // FUNDED
+            return Number(escrow.autoReleaseTime) <= now && Number(escrow.status) === 1; // FUNDED
         } catch (error) {
             return false;
         }
