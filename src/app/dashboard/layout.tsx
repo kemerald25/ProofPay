@@ -13,7 +13,7 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, PlusCircle, History, BotMessageSquare } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, History, BotMessageSquare, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -74,6 +74,17 @@ export default function DashboardLayout({
                 >
                   <History />
                   <span>History</span>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <Link href="/dashboard/simulator" passHref>
+                <SidebarMenuButton 
+                  isActive={isActive('/dashboard/simulator')}
+                  tooltip="Simulator"
+                >
+                  <MessageCircle />
+                  <span>WhatsApp Simulator</span>
                 </SidebarMenuButton>
               </Link>
             </SidebarMenuItem>

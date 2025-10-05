@@ -1,0 +1,133 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { Sentry } from '@/config/sentry';
+import EscrowService from '@/services/escrow.service';
+import DisputeService from '@/services/dispute.service';
+import WhatsAppService from '@/services/whatsapp.service';
+
+// Store messages to be sent instead of actually sending them
+let messageQueue: any[] = [];
+
+// Mock the WhatsAppService to queue messages instead of sending
+jest.spyOn(WhatsAppService, 'sendMessage').mockImplementation(async (to: string, body: string) => {
+    console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
+    messageQueue.push({ to, body });
+    return `simulated_message_sid_${Date.now()}`;
+});
+jest.spyOn(WhatsAppService, 'sendHelpMessage').mockImplementation(async (to: string) => {
+    const helpText = `🤖 *BasePay Help*
+
+*CREATE ESCROW (Seller):*
++[buyer-phone] [amount] [item]
+Example: +1234567890 50 iPhone case
+
+*CONFIRM DELIVERY (Buyer):*
+confirm [escrow-id]
+
+*RAISE DISPUTE:*
+dispute [escrow-id]
+
+*MY TRANSACTIONS:*
+history
+
+Need more help? Visit our website.`;
+    messageQueue.push({ to, body: helpText });
+    return `simulated_message_sid_${Date.now()}`;
+});
+
+
+// Handles incoming messages from the simulator UI
+export async function POST(req: NextRequest) {
+  messageQueue = []; // Clear queue for each request
+  const body = await req.json();
+
+  const from = body.from;
+  const message = (body.message as string).toLowerCase().trim();
+  const [command, ...args] = message.split(' ');
+
+  try {
+    switch (command) {
+      case 'confirm':
+        await handleConfirm(from, args[0]);
+        break;
+      case 'dispute':
+        await handleDispute(from, args[0]);
+        break;
+      case 'help':
+        await WhatsAppService.sendHelpMessage(from);
+        break;
+      case 'history':
+        await handleHistory(from);
+        break;
+      default:
+        // Try parsing as a create command
+        if (message.startsWith('+')) {
+            await handleCreate(from, message);
+        } else {
+            messageQueue.push({to: from, body: 'Sorry, I didn\'t understand that. Reply "help" for a list of commands.'});
+        }
+        break;
+    }
+  } catch (error: any) {
+    Sentry.captureException(error);
+    messageQueue.push({to: from, body: `An error occurred: ${error.message}`});
+    return NextResponse.json({ replies: messageQueue }, { status: 500 });
+  }
+
+  return NextResponse.json({ replies: messageQueue });
+}
+
+
+async function handleCreate(from: string, message: string) {
+    const parts = message.split(' ');
+    const buyerPhone = parts[0];
+    const amount = parseFloat(parts[1]);
+    const description = parts.slice(2).join(' ');
+
+    if (!buyerPhone || !amount || !description) {
+        throw new Error('Invalid format. Use: +<buyer-phone> <amount> <item>');
+    }
+
+    const escrowData = await EscrowService.createEscrow({
+        sellerPhone: from,
+        buyerPhone,
+        amount,
+        description,
+    });
+    
+    await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowData, buyerPhone });
+    await WhatsAppService.sendPaymentRequestToBuyer(buyerPhone, escrowData);
+}
+
+async function handleConfirm(from: string, escrowId: string) {
+  if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "confirm BP-123XYZ"');
+  await EscrowService.releaseFunds(escrowId, from);
+}
+
+async function handleDispute(from: string, escrowId: string) {
+  if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "dispute BP-123XYZ"');
+  await DisputeService.raiseDispute({ 
+      escrowId: escrowId,
+      raisedByPhone: from,
+      reason: 'NOT_RECEIVED'
+  });
+}
+
+async function handleHistory(from: string) {
+    const user = await EscrowService.getEscrow(from);
+    if (!user) throw new Error("User not found.");
+
+    const escrows = await EscrowService.getUserEscrows(user.id);
+    
+    if (escrows.length === 0) {
+        await WhatsAppService.sendMessage(from, "You have no transactions.");
+        return;
+    }
+
+    let historyMessage = "*Your Last 5 Transactions:*\n\n";
+    escrows.slice(0, 5).forEach(e => {
+        const role = e.seller_id === user.id ? 'Seller' : 'Buyer';
+        historyMessage += `*ID:* ${e.id}\n*Item:* ${e.item_description}\n*Status:* ${e.status}\n*Amount:* ${e.amount} USDC\n*Role:* ${role}\n-----------------\n`;
+    });
+    
+    await WhatsAppService.sendMessage(from, historyMessage);
+}

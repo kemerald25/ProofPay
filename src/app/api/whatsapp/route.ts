@@ -5,6 +5,26 @@ import EscrowService from '@/services/escrow.service';
 import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
 
+async function handleHistory(from: string) {
+    const user = await EscrowService.getEscrow(from);
+    if (!user) throw new Error("User not found.");
+
+    const escrows = await EscrowService.getUserEscrows(user.id);
+    
+    if (escrows.length === 0) {
+        await WhatsAppService.sendMessage(from, "You have no transactions.");
+        return;
+    }
+
+    let historyMessage = "*Your Last 5 Transactions:*\n\n";
+    escrows.slice(0, 5).forEach(e => {
+        const role = e.seller_id === user.id ? 'Seller' : 'Buyer';
+        historyMessage += `*ID:* ${e.id}\n*Item:* ${e.item_description}\n*Status:* ${e.status}\n*Amount:* ${e.amount} USDC\n*Role:* ${role}\n-----------------\n`;
+    });
+    
+    await WhatsAppService.sendMessage(from, historyMessage);
+}
+
 // Handles incoming WhatsApp messages from Twilio
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -33,6 +53,9 @@ export async function POST(req: NextRequest) {
         break;
       case 'help':
         await WhatsAppService.sendHelpMessage(from);
+        break;
+      case 'history':
+        await handleHistory(from);
         break;
       default:
         // Try parsing as a create command
