@@ -2,7 +2,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const hardhat_1 = require("hardhat");
-const fs_1 = require("fs");
+const fs = require("fs");
+
 async function main() {
     const [deployer] = await hardhat_1.ethers.getSigners();
     console.log('Deploying contracts with account:', deployer.address);
@@ -35,10 +36,10 @@ async function main() {
         deployedAt: new Date().toISOString()
     };
     const dir = './src/contracts';
-    if (!fs_1.default.existsSync(dir)) {
-        fs_1.default.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
     }
-    fs_1.default.writeFileSync(`${dir}/addresses.json`, JSON.stringify(deploymentInfo, null, 2));
+    fs.writeFileSync(`${dir}/addresses.json`, JSON.stringify(deploymentInfo, null, 2));
     console.log(`\nDeployment info saved to ${dir}/addresses.json`);
     console.log('\n⚠️ IMPORTANT: Update your .env file with:');
     console.log(`ESCROW_CONTRACT_ADDRESS=${escrowAddress}`);
