@@ -103,14 +103,16 @@ export async function POST(req: NextRequest) {
   WhatsAppService.sendMessage = async (to: string, body: string) => {
       console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
       messageQueue.push({ to, body });
-      return `simulated_message_sid_${Date.now()}`;
+      // In the simulator, we don't need a real SID, so we return a promise 
+      // that resolves to a simulated SID to match the function signature.
+      return Promise.resolve(`simulated_message_sid_${Date.now()}`);
   };
 
+  const body = await req.json();
+  const from = body.from;
+  const message = body.message;
+
   try {
-    const body = await req.json();
-    const from = body.from;
-    const message = (body.message as string);
-    
     await handleIncomingMessage(from, message);
     
     // Restore original function
@@ -123,6 +125,13 @@ export async function POST(req: NextRequest) {
     
     // Restore original function even on error
     WhatsAppService.sendMessage = originalSendMessage;
-    return NextResponse.json({ replies: [{to: req.json().from, body: `An error occurred: ${error.message}`}] });
+
+    // We must ensure we reply with a valid JSON response, even on error.
+    const errorReply = {
+      to: from,
+      body: `An error occurred: ${error.message}`
+    };
+
+    return NextResponse.json({ replies: [errorReply] }, { status: 200 });
   }
 }
