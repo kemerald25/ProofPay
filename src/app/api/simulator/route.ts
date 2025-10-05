@@ -6,17 +6,29 @@ import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
 import UserService from '@/services/user.service';
 
+// Format: +<buyer-phone> <amount> <item> (optional)<seller-wallet>
 async function handleCreate(from: string, message: string) {
     const parts = message.trim().split(' ');
     if (parts.length < 3 || !parts[0].startsWith('+')) {
-      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item>');
+      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item> (optional)<seller-wallet>');
     }
     const buyerPhone = parts[0];
     const amount = parseFloat(parts[1]);
-    const description = parts.slice(2).join(' ');
+    const descriptionParts = [];
+    let sellerWallet;
+
+    for (let i = 2; i < parts.length; i++) {
+        if (parts[i].startsWith('0x') && parts[i].length === 42) {
+            sellerWallet = parts[i];
+            break; 
+        }
+        descriptionParts.push(parts[i]);
+    }
+    
+    const description = descriptionParts.join(' ');
 
     if (isNaN(amount) || !description) {
-        throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item>');
+        throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item> (optional)<seller-wallet>');
     }
 
     const escrowData = await EscrowService.createEscrow({
@@ -24,9 +36,10 @@ async function handleCreate(from: string, message: string) {
         buyerPhone,
         amount,
         description,
+        sellerWallet: sellerWallet || '0x000000000000000000000000000000000000dEaD' // Placeholder for simulator
     });
     
-    await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowData, buyerPhone });
+    await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowService, buyerPhone });
     await WhatsAppService.sendPaymentRequestToBuyer(buyerPhone, escrowData);
 }
 
