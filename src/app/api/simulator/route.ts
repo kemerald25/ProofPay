@@ -46,27 +46,26 @@ export async function POST(req: NextRequest) {
   const [command, ...args] = message.split(' ');
 
   try {
-    switch (command) {
-      case 'confirm':
-        await handleConfirm(from, args[0]);
-        break;
-      case 'dispute':
-        await handleDispute(from, args[0]);
-        break;
-      case 'help':
-        await WhatsAppService.sendHelpMessage(from);
-        break;
-      case 'history':
-        await handleHistory(from);
-        break;
-      default:
-        // Try parsing as a create command
-        if (message.startsWith('+')) {
-            await handleCreate(from, message);
-        } else {
-            messageQueue.push({to: from, body: 'Sorry, I didn\'t understand that. Reply "help" for a list of commands.'});
+    if (message.startsWith('+')) {
+        await handleCreate(from, message);
+    } else {
+        switch (command) {
+            case 'confirm':
+                await handleConfirm(from, args[0]);
+                break;
+            case 'dispute':
+                await handleDispute(from, args[0]);
+                break;
+            case 'help':
+                await WhatsAppService.sendHelpMessage(from);
+                break;
+            case 'history':
+                await handleHistory(from);
+                break;
+            default:
+                messageQueue.push({to: from, body: 'Sorry, I didn\'t understand that. Reply "help" for a list of commands.'});
+                break;
         }
-        break;
     }
   } catch (error: any) {
     Sentry.captureException(error);
