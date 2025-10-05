@@ -40,9 +40,6 @@ const config: HardhatUserConfig = {
     },
     mocha: {
         timeout: 40000
-    },
-    'ts-node': {
-        project: 'tsconfig.hardhat.json'
     }
 };
 
