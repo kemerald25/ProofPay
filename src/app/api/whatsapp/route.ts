@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import twilio from 'twilio';
 import { Sentry } from '@/config/sentry';
@@ -41,8 +42,12 @@ export async function POST(req: NextRequest) {
   }
 
   const from = (body.From as string).replace('whatsapp:', '');
-  const message = (body.Body as string).toLowerCase().trim();
-  const [command, ...args] = message.split(' ');
+  const originalMessage = (body.Body as string).trim();
+  const messageForCommand = originalMessage.toLowerCase();
+  const parts = originalMessage.split(' ');
+  const command = parts[0].toLowerCase();
+  const args = parts.slice(1);
+
 
   try {
     switch (command) {
@@ -60,8 +65,8 @@ export async function POST(req: NextRequest) {
         break;
       default:
         // Try parsing as a create command
-        if (message.startsWith('+')) {
-            await handleCreate(from, message);
+        if (originalMessage.startsWith('+')) {
+            await handleCreate(from, originalMessage);
         } else {
             await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
         }
@@ -80,14 +85,18 @@ export async function POST(req: NextRequest) {
 
 
 async function handleCreate(from: string, message: string) {
-    // Format: +[buyer-phone] [amount] [item description]
+    // Format: +[buyer-phone] [amount] [seller-wallet] [item description]
     const parts = message.split(' ');
+    if (parts.length < 4 || !parts[0].startsWith('+') || !parts[2].startsWith('0x')) {
+        throw new Error('Invalid format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
+    }
     const buyerPhone = parts[0];
     const amount = parseFloat(parts[1]);
-    const description = parts.slice(2).join(' ');
+    const sellerWallet = parts[2];
+    const description = parts.slice(3).join(' ');
 
-    if (!buyerPhone || !amount || !description) {
-        throw new Error('Invalid format. Use: +<buyer-phone> <amount> <item>');
+    if (isNaN(amount) || !description || !sellerWallet) {
+        throw new Error('Invalid format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
     }
 
     const escrowData = await EscrowService.createEscrow({
@@ -95,6 +104,7 @@ async function handleCreate(from: string, message: string) {
         buyerPhone,
         amount,
         description,
+        sellerWallet
     });
     
     // Notify both parties

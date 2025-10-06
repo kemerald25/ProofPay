@@ -70,13 +70,16 @@ async function handleHistory(from: string) {
     await WhatsAppService.sendMessage(from, historyMessage);
 }
 
-async function handleIncomingMessage(from: string, message: string) {
-    const lowerCaseMessage = message.trim().toLowerCase();
-    const [command, ...args] = lowerCaseMessage.split(' ');
-
-    if (message.trim().startsWith('+')) {
-        await handleCreate(from, message.trim());
+async function handleIncomingMessage(from: string, originalMessage: string) {
+    const message = originalMessage.trim();
+    
+    if (message.startsWith('+')) {
+        await handleCreate(from, message);
     } else {
+        const parts = message.split(' ');
+        const command = parts[0].toLowerCase();
+        const args = parts.slice(1);
+
         switch (command) {
             case 'confirm':
                 await handleConfirm(from, args[0]);
