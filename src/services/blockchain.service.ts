@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 // Correctly import the full artifact which includes the ABI
-import EscrowArtifact from '../../artifacts/src/contracts/ProofPayEscrow.sol/ProofPayEscrow.json';
+import EscrowArtifact from '../contracts/ProofPayEscrow.json';
 
 const EscrowABI = EscrowArtifact.abi;
 
@@ -101,6 +101,9 @@ class BlockchainService {
         try {
             const tx = await this.escrowContract.releaseFunds(escrowId);
             const receipt = await tx.wait();
+             if (!receipt) {
+                throw new Error("Transaction receipt not found for releaseFunds");
+            }
             return receipt.hash;
         } catch (error) {
             console.error('Release funds error:', error);
@@ -113,6 +116,9 @@ class BlockchainService {
         try {
             const tx = await this.escrowContract.fundEscrow(escrowId);
             const receipt = await tx.wait();
+            if (!receipt) {
+                throw new Error("Transaction receipt not found for fundEscrow");
+            }
             return receipt.hash;
         } catch (error) {
             console.error('Fund escrow error:', error);
@@ -125,6 +131,9 @@ class BlockchainService {
         try {
             const tx = await this.escrowContract.raiseDispute(escrowId);
             const receipt = await tx.wait();
+             if (!receipt) {
+                throw new Error("Transaction receipt not found for raiseDispute");
+            }
             return receipt.hash;
         } catch (error) {
             console.error('Raise dispute error:', error);
@@ -140,6 +149,9 @@ class BlockchainService {
         try {
             const tx = await this.escrowContract.resolveDispute(escrowId, buyerPercentage);
             const receipt = await tx.wait();
+             if (!receipt) {
+                throw new Error("Transaction receipt not found for resolveDispute");
+            }
             return receipt.hash;
         } catch (error) {
             console.error('Resolve dispute error:', error);
@@ -163,6 +175,9 @@ class BlockchainService {
         try {
             const tx = await this.escrowContract.autoRelease(escrowId);
             const receipt = await tx.wait();
+             if (!receipt) {
+                throw new Error("Transaction receipt not found for autoRelease");
+            }
             return receipt.hash;
         } catch (error) {
             console.error('Auto-release error:', error);

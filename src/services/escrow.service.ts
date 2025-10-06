@@ -40,8 +40,11 @@ class EscrowService {
                 await UserService.updateWalletAddress(seller.id, params.sellerWallet);
             }
             
-            // Generate temporary buyer wallet for contract (or ask buyer to provide)
+            // If buyer has a wallet, use it, otherwise generate a temporary one
             const buyerWallet = buyer.wallet_address || ethers.Wallet.createRandom().address;
+             if (!buyer.wallet_address) {
+                await UserService.updateWalletAddress(buyer.id, buyerWallet);
+            }
             
             // Create escrow on blockchain
             const { escrowId, txHash } = await BlockchainService.createEscrow(
@@ -80,14 +83,14 @@ class EscrowService {
             
             if (error) throw error;
             
-            // Record transaction
             await this.recordTransaction({
                 escrowId: data.id,
                 type: 'CREATE',
                 txHash,
-                fromAddress: process.env.PLATFORM_FEE_WALLET,
+                fromAddress: sellerWallet,
                 toAddress: process.env.ESCROW_CONTRACT_ADDRESS,
-                status: 'CONFIRMED'
+                amount: params.amount,
+                status: 'PENDING'
             });
             
             return {
@@ -150,12 +153,12 @@ class EscrowService {
         }
     }
     
-    async releaseFunds(escrowId: string, buyerPhone: string) {
+    async releaseFunds(escrowId: string, callingPhone: string) {
         try {
             const escrow = await this.getEscrow(escrowId);
             
             if (!escrow) throw new Error('Escrow not found');
-            if (escrow.buyer_phone !== buyerPhone) throw new Error('Unauthorized');
+            if (escrow.buyer_phone !== callingPhone) throw new Error('Unauthorized: Only the buyer can release funds.');
             if (escrow.status !== 'FUNDED') throw new Error('Escrow not funded');
             if (escrow.dispute_raised) throw new Error('Dispute is active');
             
