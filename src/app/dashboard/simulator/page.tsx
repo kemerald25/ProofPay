@@ -14,6 +14,8 @@ interface Message {
   phone: string;
 }
 
+const CHAT_STORAGE_KEY = 'whatsapp-simulator-chat';
+
 export default function WhatsAppSimulatorPage() {
   const [phone, setPhone] = useState('+15550001');
   const [message, setMessage] = useState('');
@@ -23,7 +25,23 @@ export default function WhatsAppSimulatorPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    try {
+      const savedChat = localStorage.getItem(CHAT_STORAGE_KEY);
+      if (savedChat) {
+        setChat(JSON.parse(savedChat));
+      }
+    } catch (error) {
+      console.error("Failed to load chat from local storage", error);
+    }
+  }, []);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    try {
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chat));
+    } catch (error) {
+        console.error("Failed to save chat to local storage", error);
+    }
   }, [chat]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -135,7 +153,7 @@ export default function WhatsAppSimulatorPage() {
               <div>
                 <h4 className="font-semibold text-foreground mb-1">Commands:</h4>
                 <ul className="list-disc pl-5 space-y-1">
-                    <li><code className="font-code text-xs">+[buyer-phone] [amount] [item]</code> - Create an escrow (as seller).</li>
+                    <li><code className="font-code text-xs">+[buyer-phone] [amount] [seller-wallet] [item]</code> - Create an escrow (as seller).</li>
                     <li><code className="font-code text-xs">confirm [escrow-id]</code> - Confirm delivery (as buyer).</li>
                     <li><code className="font-code text-xs">dispute [escrow-id]</code> - Raise a dispute.</li>
                     <li><code className="font-code text-xs">history</code> - Get your transaction history.</li>
@@ -145,7 +163,7 @@ export default function WhatsAppSimulatorPage() {
                <div>
                 <h4 className="font-semibold text-foreground mb-1">Example:</h4>
                  <p>1. Set your phone as seller (e.g., +15550001).</p>
-                 <p>2. Send: <code className="font-code text-xs">+15550002 50 Vintage T-Shirt</code></p>
+                 <p>2. Send: <code className="font-code text-xs">+15550002 50 0x... Vintage T-Shirt</code></p>
                  <p>3. Change phone to buyer's (+15550002).</p>
                  <p>4. Send: <code className="font-code text-xs">confirm BP-XXXXXX</code></p>
               </div>

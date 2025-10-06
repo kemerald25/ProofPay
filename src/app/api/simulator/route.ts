@@ -6,29 +6,19 @@ import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
 import UserService from '@/services/user.service';
 
-// Format: +<buyer-phone> <amount> <item> (optional)<seller-wallet>
+// Format: +<buyer-phone> <amount> <seller-wallet> <item>
 async function handleCreate(from: string, message: string) {
     const parts = message.trim().split(' ');
-    if (parts.length < 3 || !parts[0].startsWith('+')) {
-      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item> (optional)<seller-wallet>');
+    if (parts.length < 4 || !parts[0].startsWith('+') || !parts[2].startsWith('0x')) {
+      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
     }
     const buyerPhone = parts[0];
     const amount = parseFloat(parts[1]);
-    const descriptionParts = [];
-    let sellerWallet;
+    const sellerWallet = parts[2];
+    const description = parts.slice(3).join(' ');
 
-    for (let i = 2; i < parts.length; i++) {
-        if (parts[i].startsWith('0x') && parts[i].length === 42) {
-            sellerWallet = parts[i];
-            break; 
-        }
-        descriptionParts.push(parts[i]);
-    }
-    
-    const description = descriptionParts.join(' ');
-
-    if (isNaN(amount) || !description) {
-        throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item> (optional)<seller-wallet>');
+    if (isNaN(amount) || !description || !sellerWallet) {
+        throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
     }
 
     const escrowData = await EscrowService.createEscrow({
@@ -36,7 +26,7 @@ async function handleCreate(from: string, message: string) {
         buyerPhone,
         amount,
         description,
-        sellerWallet: sellerWallet || '0x000000000000000000000000000000000000dEaD' // Placeholder for simulator
+        sellerWallet,
     });
     
     await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowData, buyerPhone });
