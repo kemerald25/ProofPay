@@ -17,7 +17,7 @@ interface Message {
 const CHAT_STORAGE_KEY = 'whatsapp-simulator-chat';
 
 export default function WhatsAppSimulatorPage() {
-  const [phone, setPhone] = useState('+15550001');
+  const [phone, setPhone] = useState('+2349076948648');
   const [message, setMessage] = useState('');
   const [chat, setChat] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -163,8 +163,8 @@ export default function WhatsAppSimulatorPage() {
                <div>
                 <h4 className="font-semibold text-foreground mb-1">Example:</h4>
                  <p>1. Set your phone as seller (e.g., +15550001).</p>
-                 <p>2. Send: <code className="font-code text-xs">+15550002 50 0x... Vintage T-Shirt</code></p>
-                 <p>3. Change phone to buyer's (+15550002).</p>
+                 <p>2. Send: <code className="font-code text-xs">+2349076948648 50 0x... Vintage T-Shirt</code></p>
+                 <p>3. Change phone to buyer's (+2349076948648).</p>
                  <p>4. Send: <code className="font-code text-xs">confirm BP-XXXXXX</code></p>
               </div>
             </CardContent>
