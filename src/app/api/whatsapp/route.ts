@@ -43,34 +43,34 @@ export async function POST(req: NextRequest) {
 
   const from = (body.From as string).replace('whatsapp:', '');
   const originalMessage = (body.Body as string).trim();
-  const messageForCommand = originalMessage.toLowerCase();
   const parts = originalMessage.split(' ');
   const command = parts[0].toLowerCase();
-  const args = parts.slice(1);
-
-
+  
   try {
-    switch (command) {
-      case 'confirm':
-        await handleConfirm(from, args[0]);
-        break;
-      case 'dispute':
-        await handleDispute(from, args[0]);
-        break;
-      case 'help':
-        await WhatsAppService.sendHelpMessage(from);
-        break;
-      case 'history':
-        await handleHistory(from);
-        break;
-      default:
-        // Try parsing as a create command
-        if (originalMessage.startsWith('+')) {
-            await handleCreate(from, originalMessage);
-        } else {
+    // Handle create command separately as it has a different structure
+    if (originalMessage.startsWith('+')) {
+        await handleCreate(from, originalMessage);
+    } else {
+        const args = parts.slice(1);
+        const escrowId = args[0]; // Keep original case
+
+        switch (command) {
+          case 'confirm':
+            await handleConfirm(from, escrowId);
+            break;
+          case 'dispute':
+            await handleDispute(from, escrowId);
+            break;
+          case 'help':
+            await WhatsAppService.sendHelpMessage(from);
+            break;
+          case 'history':
+            await handleHistory(from);
+            break;
+          default:
             await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
+            break;
         }
-        break;
     }
   } catch (error: any) {
     Sentry.captureException(error);

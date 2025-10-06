@@ -35,11 +35,13 @@ async function handleCreate(from: string, message: string) {
 
 async function handleConfirm(from: string, escrowId: string) {
   if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "confirm BP-123XYZ"');
+  // The 'from' in the simulator is the number in the input field, which is the buyer in this case.
   await EscrowService.releaseFunds(escrowId, from);
 }
 
 async function handleDispute(from: string, escrowId: string) {
   if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "dispute BP-123XYZ"');
+  // The 'from' is the initiator of the dispute.
   await DisputeService.raiseDispute({ 
       escrowId: escrowId,
       raisedByPhone: from,
@@ -72,20 +74,22 @@ async function handleHistory(from: string) {
 
 async function handleIncomingMessage(from: string, originalMessage: string) {
     const message = originalMessage.trim();
+    const messageForCommand = originalMessage.toLowerCase();
+    const parts = originalMessage.split(' ');
+    const command = parts[0].toLowerCase();
     
     if (message.startsWith('+')) {
         await handleCreate(from, message);
     } else {
-        const parts = message.split(' ');
-        const command = parts[0].toLowerCase();
         const args = parts.slice(1);
+        const escrowId = args[0]; // Keep original case for ID
 
         switch (command) {
             case 'confirm':
-                await handleConfirm(from, args[0]);
+                await handleConfirm(from, escrowId);
                 break;
             case 'dispute':
-                await handleDispute(from, args[0]);
+                await handleDispute(from, escrowId);
                 break;
             case 'help':
                 await WhatsAppService.sendHelpMessage(from);
