@@ -35,6 +35,7 @@ export interface ProofPayEscrowInterface extends Interface {
       | "fundEscrow"
       | "getEscrow"
       | "owner"
+      | "ownerReleaseFunds"
       | "platformFeeBps"
       | "raiseDispute"
       | "releaseFunds"
@@ -84,6 +85,10 @@ export interface ProofPayEscrowInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "ownerReleaseFunds",
+    values: [BytesLike]
+  ): string;
   encodeFunctionData(
     functionFragment: "platformFeeBps",
     values?: undefined
@@ -138,6 +143,10 @@ export interface ProofPayEscrowInterface extends Interface {
   decodeFunctionResult(functionFragment: "fundEscrow", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getEscrow", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "ownerReleaseFunds",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "platformFeeBps",
     data: BytesLike
@@ -402,6 +411,12 @@ export interface ProofPayEscrow extends BaseContract {
 
   owner: TypedContractMethod<[], [string], "view">;
 
+  ownerReleaseFunds: TypedContractMethod<
+    [escrowId: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
   platformFeeBps: TypedContractMethod<[], [bigint], "view">;
 
   raiseDispute: TypedContractMethod<
@@ -506,6 +521,9 @@ export interface ProofPayEscrow extends BaseContract {
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "ownerReleaseFunds"
+  ): TypedContractMethod<[escrowId: BytesLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "platformFeeBps"
   ): TypedContractMethod<[], [bigint], "view">;

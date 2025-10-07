@@ -47,8 +47,8 @@ class BlockchainListener {
 
         try {
             // Define the event filter for EscrowFunded
-            // We can filter by the escrowId if it's an indexed parameter.
-            // In our contract, escrowId is indexed for EscrowFunded.
+            // The first argument to the filter corresponds to the first indexed event parameter (escrowId).
+            // It needs to be an array of values to match against.
             const eventFilter = this.escrowContract.filters.EscrowFunded(escrowIds);
 
             // Query logs from a reasonable block range. For a real-time system,
