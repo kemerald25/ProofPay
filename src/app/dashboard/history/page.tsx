@@ -1,3 +1,7 @@
+// src/app/dashboard/history/page.tsx
+'use server';
+
+import { createClient } from '@supabase/supabase-js';
 import {
   Card,
   CardContent,
@@ -16,69 +20,26 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Escrow } from '@/lib/definitions';
 import { format, parseISO } from 'date-fns';
+import Link from 'next/link';
 
-const mockAllEscrows: Escrow[] = [
-  {
-    id: 'BP-123',
-    escrow_id: '0x...',
-    buyer_id: 'user-b',
-    seller_id: 'user-a',
-    buyer_phone: '+15550001',
-    seller_phone: '+15550002',
-    seller_wallet: '0xabc',
-    amount: '100.00',
-    status: 'FUNDED',
-    item_description: 'Vintage Leather Jacket',
-    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    funded_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    dispute_raised: false,
-  },
-  {
-    id: 'BP-456',
-    escrow_id: '0x...',
-    buyer_id: 'user-a',
-    seller_id: 'user-c',
-    buyer_phone: '+15550002',
-    seller_phone: '+15550003',
-    seller_wallet: '0xdef',
-    amount: '50.00',
-    status: 'CREATED',
-    item_description: 'Handmade Ceramic Mug',
-    created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    dispute_raised: false,
-  },
-  {
-    id: 'BP-789',
-    escrow_id: '0x...',
-    buyer_id: 'user-d',
-    seller_id: 'user-a',
-    buyer_phone: '+15550004',
-    seller_phone: '+15550002',
-    seller_wallet: '0xghi',
-    amount: '250.00',
-    status: 'DISPUTED',
-    item_description: 'Antique Pocket Watch',
-    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    funded_at: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
-    dispute_raised: true,
-  },
-   {
-    id: 'BP-987',
-    escrow_id: '0x...',
-    buyer_id: 'user-a',
-    seller_id: 'user-e',
-    buyer_phone: '+15550002',
-    seller_phone: '+15550005',
-    seller_wallet: '0xjkl',
-    amount: '1200.00',
-    status: 'COMPLETED',
-    item_description: 'Custom Gaming PC',
-    created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    funded_at: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString(),
-    completed_at: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-    dispute_raised: false,
-  },
-];
+const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!
+);
+
+async function getEscrows(): Promise<Escrow[]> {
+    const { data, error } = await supabase
+        .from('escrows')
+        .select('*')
+        .order('created_at', { ascending: false });
+    
+    if (error) {
+        console.error('Error fetching escrows:', error);
+        return [];
+    }
+
+    return data as Escrow[];
+}
 
 
 const StatusBadge = ({ status }: { status: Escrow['status'] }) => {
@@ -94,7 +55,9 @@ const StatusBadge = ({ status }: { status: Escrow['status'] }) => {
     return <Badge variant={variants[status]}>{status}</Badge>;
   };
 
-export default function HistoryPage() {
+export default async function HistoryPage() {
+  const escrows = await getEscrows();
+
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold font-headline">Transaction History</h1>
@@ -113,20 +76,26 @@ export default function HistoryPage() {
                 <TableHead>Item</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Seller</TableHead>
+                <TableHead>Buyer</TableHead>
                 <TableHead>Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockAllEscrows.map((escrow) => (
+              {escrows.map((escrow) => (
                 <TableRow key={escrow.id}>
-                  <TableCell className="font-medium">{escrow.id}</TableCell>
+                    <TableCell className="font-medium">
+                        <Link href={`/dashboard/escrow/${escrow.id}`} className="hover:underline text-primary">
+                            {escrow.id}
+                        </Link>
+                    </TableCell>
                   <TableCell>{escrow.item_description}</TableCell>
                   <TableCell>
                     <StatusBadge status={escrow.status} />
                   </TableCell>
                   <TableCell className="text-right">${escrow.amount}</TableCell>
-                  <TableCell>{escrow.seller_id === 'user-a' ? 'Seller' : 'Buyer'}</TableCell>
+                  <TableCell>{escrow.seller_phone}</TableCell>
+                  <TableCell>{escrow.buyer_phone}</TableCell>
                   <TableCell>
                     {format(parseISO(escrow.created_at), 'MMM d, yyyy')}
                   </TableCell>
