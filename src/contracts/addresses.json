@@ -1,7 +1,7 @@
 {
-  "escrowAddress": "0x9A46EB60F2cfaB8cD778b9fD612FCD1A86D28E72",
+  "escrowAddress": "0xA608B8718D185a0337aE087Fa9b0014cea90b166",
   "usdcAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
   "feeCollector": "0x8ACE347a4d033af77512BC9ad52B118E4a247ea4",
   "network": "base-sepolia",
-  "deployedAt": "2025-10-07T20:39:02.761Z"
+  "deployedAt": "2025-10-07T20:52:02.726Z"
 }
