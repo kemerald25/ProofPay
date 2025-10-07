@@ -79,16 +79,17 @@ class BlockchainService {
     async checkEscrowStatus(escrowId: string): Promise<any> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const escrow = await this.escrowContract.getEscrow(escrowId);
-            
+            const escrowData = await this.escrowContract.getEscrow(escrowId);
+            const status = Number(escrowData.status);
+
             return {
-                buyer: escrow.buyer,
-                seller: escrow.seller,
-                amount: ethers.formatUnits(escrow.amount, 6),
-                status: this.getStatusString(Number(escrow.status)),
-                autoReleaseTime: new Date(Number(escrow.autoReleaseTime) * 1000),
-                disputeRaised: escrow.disputeRaised,
-                isFunded: Number(escrow.status) === 1,
+                buyer: escrowData.buyer,
+                seller: escrowData.seller,
+                amount: ethers.formatUnits(escrowData.amount, 6),
+                status: this.getStatusString(status),
+                autoReleaseTime: new Date(Number(escrowData.autoReleaseTime) * 1000),
+                disputeRaised: escrowData.disputeRaised,
+                isFunded: status === 1, // Correctly check the numeric status
             };
             
         } catch (error) {
