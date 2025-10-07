@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import BlockchainService from './blockchain.service';
 import WhatsAppService from './whatsapp.service';
@@ -229,5 +230,3 @@ class EscrowService {
 }
 
 export default new EscrowService();
-
-    
