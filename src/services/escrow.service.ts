@@ -120,12 +120,13 @@ class EscrowService {
         try {
             const escrow = await this.getEscrow(escrowId);
             if (!escrow) throw new Error('Escrow not found');
+            if (escrow.status === 'FUNDED') return;
             
             const blockchainStatus = await BlockchainService.checkEscrowStatus(
                 escrow.escrow_id
             );
             
-            if (blockchainStatus.status === 'FUNDED' && escrow.status !== 'FUNDED') {
+            if (blockchainStatus.isFunded) {
                 const { error } = await supabase.from('escrows').update({ status: 'FUNDED', funded_at: new Date().toISOString() }).eq('id', escrowId);
                 if (error) throw error;
                 
@@ -139,8 +140,6 @@ class EscrowService {
                     `✅ Payment successful! ${escrow.amount} is secured in escrow. You'll receive the item soon. Reply "confirm ${escrowId}" when you receive it.`
                 );
             }
-            
-            return blockchainStatus;
             
         } catch (error) {
             Sentry.captureException(error);
@@ -157,7 +156,7 @@ class EscrowService {
             
             if (!escrow) throw new Error('Escrow not found');
             if (escrow.buyer_phone !== callingPhone) throw new Error('Unauthorized: Only the buyer can release funds.');
-            if (escrow.status !== 'FUNDED') throw new Error('Escrow is not in a fundable state.');
+            if (escrow.status !== 'FUNDED') throw new Error('Escrow is not in a funded state.');
             if (escrow.dispute_raised) throw new Error('Dispute is active');
             
             const txHash = await BlockchainService.releaseFunds(escrow.escrow_id);

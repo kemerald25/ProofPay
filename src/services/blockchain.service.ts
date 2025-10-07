@@ -87,7 +87,8 @@ class BlockchainService {
                 amount: ethers.formatUnits(escrow.amount, 6),
                 status: this.getStatusString(Number(escrow.status)),
                 autoReleaseTime: new Date(Number(escrow.autoReleaseTime) * 1000),
-                disputeRaised: escrow.disputeRaised
+                disputeRaised: escrow.disputeRaised,
+                isFunded: Number(escrow.status) === 1,
             };
             
         } catch (error) {
