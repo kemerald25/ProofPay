@@ -38,7 +38,7 @@ class WhatsAppService {
     }
 
     async sendEscrowCreatedToSeller(sellerPhone: string, escrow: any) {
-        const message = `🚀 Escrow Created!\n\n*ID:* ${escrow.id}\n*Item:* ${escrow.item_description}\n*Amount:* ${escrow.amount} USDC\n*Buyer:* ${escrow.buyerPhone}\n\nYou'll be notified when the buyer funds the escrow.`;
+        const message = `🚀 Escrow Created!\n\n*ID:* ${escrow.id}\n*Item:* ${escrow.item_description}\n*Amount:* ${escrow.amount} USDC\n*Buyer:* ${escrow.buyer_phone}\n\nYou'll be notified when the buyer funds the escrow.`;
         return this.sendMessage(sellerPhone, message);
     }
 

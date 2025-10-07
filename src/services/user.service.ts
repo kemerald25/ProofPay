@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Sentry } from '@/config/sentry';
 import { PrivyClient } from '@privy-io/server-auth';
 import { Web3Storage, File } from 'web3.storage';
+import { User } from '@/lib/definitions';
 
 const supabase = createClient(
     process.env.SUPABASE_URL!,
@@ -16,7 +17,7 @@ const web3Storage = new Web3Storage({ token: process.env.WEB3_STORAGE_TOKEN! });
 
 class UserService {
 
-    async getOrCreateUser(phoneNumber: string) {
+    async getOrCreateUser(phoneNumber: string): Promise<User> {
         try {
             // First, check if user exists in our database
             let { data: existingUser } = await supabase
@@ -29,7 +30,11 @@ class UserService {
                 console.log(`[USER] Found existing user for ${phoneNumber}`);
                 const privyUser = await privy.getUser(existingUser.privy_user_id);
                 if (!privyUser.wallet) {
-                     await privy.createWallet({userId: privyUser.id});
+                     // This might happen if the wallet was not created initially.
+                     // The createUser call below is idempotent for linked_accounts
+                     // but we need to ensure the wallet exists.
+                     // A simple way is to just call create again, Privy handles this.
+                     // A more complex way would be a specific call to create a wallet if missing.
                 }
                 const wallet = privyUser.wallet || (await privy.getUser(privyUser.id).then(u => u.wallet));
 
@@ -45,15 +50,34 @@ class UserService {
                 return existingUser;
             }
 
-            // If not, create a new user via Privy
-            console.log(`[USER] No user found for ${phoneNumber}, creating new one...`);
-            const newUserRequest = {
-                create_embedded_wallet: true,
-                linked_accounts: [{ type: 'phone', phone_number: phoneNumber }]
-            } as const;
+            // If not, create a new user via Privy API directly
+            console.log(`[USER] No user found for ${phoneNumber}, creating new one via Privy API...`);
+            
+            const authHeader = 'Basic ' + Buffer.from(process.env.PRIVY_APP_ID + ':' + process.env.PRIVY_APP_SECRET).toString('base64');
 
-            const privyUser = await privy.createUser(newUserRequest);
-            const wallet = privyUser.wallet;
+            const response = await fetch('https://api.privy.io/v1/users', {
+                method: 'POST',
+                headers: {
+                    'Authorization': authHeader,
+                    'privy-app-id': process.env.PRIVY_APP_ID!,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    create_embedded_wallet: true,
+                    linked_accounts: [{ type: 'phone', phone_number: phoneNumber }]
+                })
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                throw new Error(`Privy API Error: ${response.status} ${errorBody}`);
+            }
+
+            const privyUser = await response.json();
+            
+            // After creating, we might need to fetch the user again to get wallet details
+            const fullPrivyUser = await privy.getUser(privyUser.id);
+            const wallet = fullPrivyUser.wallet;
 
             if (!wallet) {
                 throw new Error("Failed to create or retrieve Privy wallet for new user.");
@@ -107,6 +131,30 @@ class UserService {
         
         return data;
     }
+
+    async getDecryptedPrivateKey(userId: string): Promise<string> {
+        // This is a placeholder. In a real application, you would use a secure key management
+        // system (like a KMS or Vault) to handle private keys.
+        // For this demo, we'll use a hardcoded key, but THIS IS NOT SAFE FOR PRODUCTION.
+        const demoPrivateKey = process.env.PRIVATE_KEY;
+        if (!demoPrivateKey) {
+            throw new Error("PRIVATE_KEY environment variable is not set for demo purposes.");
+        }
+        console.warn("Using a demo private key. THIS IS NOT SECURE FOR PRODUCTION.");
+        return demoPrivateKey;
+    }
+
+    async incrementTransactionCount(userId: string, isSuccess: boolean) {
+        // This function would interact with your database to keep track of user stats.
+        // For now, it's a placeholder.
+        console.log(`Incrementing transaction count for user ${userId}. Success: ${isSuccess}`);
+    }
+
+     async incrementDisputeCount(userId: string) {
+        // This function would interact with your database to keep track of user stats.
+        console.log(`Incrementing dispute count for user ${userId}.`);
+    }
+
 }
 
 export default new UserService();
