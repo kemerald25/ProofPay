@@ -36,7 +36,7 @@ class BlockchainService {
         try {
             const amountInWei = ethers.parseUnits(amount, 6); // USDC has 6 decimals
             
-            const tx = await this.escrowContract.connect(this.wallet!).createEscrow(
+            const tx = await this.escrowContract.createEscrow(
                 buyerAddress,
                 sellerAddress,
                 amountInWei
@@ -102,7 +102,7 @@ class BlockchainService {
     async releaseFunds(escrowId: string): Promise<string> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const tx = await this.escrowContract.connect(this.wallet!).ownerReleaseFunds(escrowId);
+            const tx = await this.escrowContract.ownerReleaseFunds(escrowId);
             const receipt = await tx.wait();
              if (!receipt) {
                 throw new Error("Transaction receipt not found for releaseFunds");
@@ -117,7 +117,7 @@ class BlockchainService {
     async fundEscrow(escrowId: string): Promise<string> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const tx = await this.escrowContract.connect(this.wallet!).fundEscrow(escrowId);
+            const tx = await this.escrowContract.fundEscrow(escrowId);
             const receipt = await tx.wait();
             if (!receipt) {
                 throw new Error("Transaction receipt not found for fundEscrow");
@@ -132,7 +132,7 @@ class BlockchainService {
     async raiseDispute(escrowId: string): Promise<string> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const tx = await this.escrowContract.connect(this.wallet!).raiseDispute(escrowId);
+            const tx = await this.escrowContract.raiseDispute(escrowId);
             const receipt = await tx.wait();
              if (!receipt) {
                 throw new Error("Transaction receipt not found for raiseDispute");
@@ -150,7 +150,7 @@ class BlockchainService {
     ): Promise<string> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const tx = await this.escrowContract.connect(this.wallet!).resolveDispute(escrowId, buyerPercentage);
+            const tx = await this.escrowContract.resolveDispute(escrowId, buyerPercentage);
             const receipt = await tx.wait();
              if (!receipt) {
                 throw new Error("Transaction receipt not found for resolveDispute");
@@ -176,7 +176,7 @@ class BlockchainService {
     async executeAutoRelease(escrowId: string): Promise<string> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const tx = await this.escrowContract.connect(this.wallet!).autoRelease(escrowId);
+            const tx = await this.escrowContract.autoRelease(escrowId);
             const receipt = await tx.wait();
              if (!receipt) {
                 throw new Error("Transaction receipt not found for autoRelease");
@@ -195,3 +195,5 @@ class BlockchainService {
 }
 
 export default new BlockchainService();
+
+    

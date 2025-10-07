@@ -138,9 +138,9 @@ contract ProofPayEscrow is ReentrancyGuard, Ownable {
         require(msg.sender == escrow.buyer, "Only buyer can release");
         require(!escrow.disputeRaised, "Dispute is active");
         
-        _completEscrow(escrowId);
+        _completeEscrow(escrowId);
     }
-    
+
     /**
      * @notice Release funds to seller, callable only by the contract owner.
      * @param escrowId The escrow identifier
@@ -150,7 +150,7 @@ contract ProofPayEscrow is ReentrancyGuard, Ownable {
         require(escrow.status == EscrowStatus.FUNDED, "Escrow not funded");
         require(!escrow.disputeRaised, "Dispute is active");
         
-        _completEscrow(escrowId);
+        _completeEscrow(escrowId);
     }
     
     /**
@@ -163,7 +163,7 @@ contract ProofPayEscrow is ReentrancyGuard, Ownable {
         require(block.timestamp >= escrow.autoReleaseTime, "Auto-release time not reached");
         require(!escrow.disputeRaised, "Dispute is active");
         
-        _completEscrow(escrowId);
+        _completeEscrow(escrowId);
         emit AutoReleaseExecuted(escrowId);
     }
     
@@ -225,7 +225,7 @@ contract ProofPayEscrow is ReentrancyGuard, Ownable {
     /**
      * @notice Internal function to complete escrow and transfer funds
      */
-    function _completEscrow(bytes32 escrowId) internal {
+    function _completeEscrow(bytes32 escrowId) internal {
         Escrow storage escrow = escrows[escrowId];
         
         uint256 platformFee = (escrow.amount * platformFeeBps) / 10000;
@@ -279,3 +279,4 @@ contract ProofPayEscrow is ReentrancyGuard, Ownable {
         );
     }
 }
+    

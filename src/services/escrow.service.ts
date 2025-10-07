@@ -117,41 +117,8 @@ class EscrowService {
         return data;
     }
     
-    async checkPaymentStatus(escrowId: string) {
-        try {
-            const escrow = await this.getEscrow(escrowId);
-            if (!escrow) throw new Error('Escrow not found');
-            
-            // This is the crucial check against the blockchain state.
-            const fundedEvents = await BlockchainListener.getEscrowFundedEvents([escrow.escrow_id]);
-            const isFundedOnChain = fundedEvents.length > 0;
-
-            if (isFundedOnChain && escrow.status !== 'FUNDED') {
-                const { error } = await supabase.from('escrows').update({ status: 'FUNDED', funded_at: new Date().toISOString() }).eq('id', escrowId);
-                if (error) throw error;
-                
-                await WhatsAppService.sendMessage(
-                    escrow.seller_phone,
-                    `✅ Payment received! ${escrow.amount} USDC is now in escrow. Deliver the item and buyer will confirm.`
-                );
-                
-                await WhatsAppService.sendMessage(
-                    escrow.buyer_phone,
-                    `✅ Payment successful! ${escrow.amount} USDC is secured in escrow. You'll receive the item soon. Reply "confirm ${escrowId}" when you receive it.`
-                );
-            }
-            
-        } catch (error) {
-            Sentry.captureException(error);
-            throw error;
-        }
-    }
-    
     async releaseFunds(escrowId: string, callingPhone: string) {
         try {
-            // Always check for new payments before proceeding
-            await this.checkPaymentStatus(escrowId);
-
             const escrow = await this.getEscrow(escrowId);
             
             if (!escrow) throw new Error('Escrow not found');
@@ -262,3 +229,5 @@ class EscrowService {
 }
 
 export default new EscrowService();
+
+    
