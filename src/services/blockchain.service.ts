@@ -81,7 +81,7 @@ class BlockchainService {
         try {
             const escrowData = await this.escrowContract.getEscrow(escrowId);
             const status = Number(escrowData.status);
-            const isFunded = status === 1;
+            const isFunded = status === 1; // 1 is the enum value for FUNDED
 
             return {
                 buyer: escrowData.buyer,
@@ -102,7 +102,7 @@ class BlockchainService {
     async releaseFunds(escrowId: string): Promise<string> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const tx = await this.escrowContract.connect(this.wallet!).releaseFunds(escrowId);
+            const tx = await this.escrowContract.connect(this.wallet!).ownerReleaseFunds(escrowId);
             const receipt = await tx.wait();
              if (!receipt) {
                 throw new Error("Transaction receipt not found for releaseFunds");
