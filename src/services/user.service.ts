@@ -18,58 +18,54 @@ const web3Storage = new Web3Storage({ token: process.env.WEB3_STORAGE_TOKEN! });
 
 class UserService {
 
+    private async _createPrivyUser(phoneNumber: string): Promise<any> {
+        const authHeader = 'Basic ' + Buffer.from(process.env.PRIVY_APP_ID + ':' + process.env.PRIVY_APP_SECRET).toString('base64');
+        const response = await fetch('https://api.privy.io/v1/users', {
+            method: 'POST',
+            headers: {
+                'Authorization': authHeader,
+                'privy-app-id': process.env.PRIVY_APP_ID!,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                linked_accounts: [{ type: 'phone', number: phoneNumber }],
+                wallets: [{ chain_type: 'ethereum' }]
+            })
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.json();
+            throw new Error(`Privy API Error: ${response.status} ${JSON.stringify(errorBody)}`);
+        }
+        return response.json();
+    }
+
     async getOrCreateUser(phoneNumber: string): Promise<User> {
         try {
-            // First, check if user exists in our database
-            const { data: existingUser } = await supabase
-                .from('users')
-                .select('*')
-                .eq('phone_number', phoneNumber)
-                .single();
-
+            const existingUser = await this.getUserByPhone(phoneNumber);
             if (existingUser) {
-                console.log(`[USER] Found existing user for ${phoneNumber}`);
-                const privyUser = await privy.getUser(existingUser.privy_user_id);
-                const wallet = privyUser.wallet || (await privy.getUser(privyUser.id).then(u => u.wallet));
-
-                if (wallet && wallet.address !== existingUser.wallet_address) {
-                    const { data: updatedUser } = await supabase
-                        .from('users')
-                        .update({ wallet_address: wallet.address })
-                        .eq('id', existingUser.id)
-                        .select()
-                        .single();
-                    return updatedUser!;
-                }
+                 console.log(`[USER] Found existing user for ${phoneNumber}`);
+                 // Make sure wallet address is up to date.
+                 const privyUser = await privy.getUser(existingUser.privy_user_id);
+                 const wallet = privyUser.wallet || (privyUser.linkedAccounts.find(a => a.type === 'wallet') as any);
+                 
+                 if (wallet && wallet.address !== existingUser.wallet_address) {
+                     const { data: updatedUser } = await supabase
+                         .from('users')
+                         .update({ wallet_address: wallet.address })
+                         .eq('id', existingUser.id)
+                         .select()
+                         .single();
+                     return updatedUser!;
+                 }
                 return existingUser;
             }
 
             // If not, create a new user via Privy API directly
             console.log(`[USER] No user found for ${phoneNumber}, creating new one via Privy API...`);
+            const privyUser = await this._createPrivyUser(phoneNumber);
             
-            const authHeader = 'Basic ' + Buffer.from(process.env.PRIVY_APP_ID + ':' + process.env.PRIVY_APP_SECRET).toString('base64');
-
-            const response = await fetch('https://api.privy.io/v1/users', {
-                method: 'POST',
-                headers: {
-                    'Authorization': authHeader,
-                    'privy-app-id': process.env.PRIVY_APP_ID!,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    create_embedded_wallet: true,
-                    linked_accounts: [{ type: 'phone', number: phoneNumber }]
-                })
-            });
-
-            if (!response.ok) {
-                const errorBody = await response.json();
-                throw new Error(`Privy API Error: ${response.status} ${JSON.stringify(errorBody)}`);
-            }
-
-            const privyUser = await response.json();
-            
-            // After creating, we might need to fetch the user again to get wallet details
+            // After creating, we need to fetch the user again to get wallet details
             const fullPrivyUser = await privy.getUser(privyUser.id);
             const wallet = fullPrivyUser.wallet;
 
