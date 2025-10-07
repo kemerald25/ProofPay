@@ -57,14 +57,14 @@ class UserService {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    create_embedded_wallet: true,
-                    linked_accounts: [{ type: 'phone', number: phoneNumber }]
+                    linked_accounts: [{ type: 'phone', number: phoneNumber }],
+                    wallets: [{ chain_type: 'ethereum' }]
                 })
             });
 
             if (!response.ok) {
-                const errorBody = await response.text();
-                throw new Error(`Privy API Error: ${response.status} ${errorBody}`);
+                const errorBody = await response.json();
+                throw new Error(`Privy API Error: ${response.status} ${JSON.stringify(errorBody)}`);
             }
 
             const privyUser = await response.json();
