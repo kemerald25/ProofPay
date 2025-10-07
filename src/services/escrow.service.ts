@@ -1,10 +1,8 @@
-
 import { createClient } from '@supabase/supabase-js';
 import BlockchainService from './blockchain.service';
 import WhatsAppService from './whatsapp.service';
 import UserService from './user.service';
 import { Sentry } from '@/config/sentry';
-import { ethers } from 'ethers';
 
 const supabase = createClient(
     process.env.SUPABASE_URL!,
@@ -20,9 +18,16 @@ class EscrowService {
         description?: string;
     }) {
         try {
-            // Get or create users and their wallets
-            const seller = await UserService.getOrCreateUser(params.sellerPhone);
-            const buyer = await UserService.getOrCreateUser(params.buyerPhone);
+            // Ensure both users exist and have wallets before proceeding
+            const seller = await UserService.getUserByPhone(params.sellerPhone);
+            if (!seller || !seller.wallet_address) {
+                throw new Error(`Seller with phone ${params.sellerPhone} not found or has no wallet. Please create a wallet for this user first.`);
+            }
+
+            const buyer = await UserService.getUserByPhone(params.buyerPhone);
+            if (!buyer || !buyer.wallet_address) {
+                throw new Error(`Buyer with phone ${params.buyerPhone} not found or has no wallet. Please have them create a wallet first.`);
+            }
             
             const sellerWallet = seller.wallet_address;
             const buyerWallet = buyer.wallet_address;
@@ -61,13 +66,14 @@ class EscrowService {
             
             if (error) throw error;
             
+            await WhatsAppService.sendEscrowCreatedToSeller(params.sellerPhone, { ...data, buyerPhone: params.buyerPhone });
+            await WhatsAppService.sendPaymentRequestToBuyer(params.buyerPhone, data);
+            
             return {
                 escrowId: data.id,
                 blockchainEscrowId: escrowId,
                 amount: params.amount,
                 description: params.description,
-                sellerWallet,
-                autoReleaseTime,
             };
             
         } catch (error) {
@@ -159,7 +165,7 @@ class EscrowService {
     
     async updateEscrowStatus(escrowId: string, status: string, fundedAt?: string) {
         let updateData: any = { status };
-        if (fundedAt) {
+        if (fundedAt && status === 'FUNDED') {
             updateData.funded_at = fundedAt;
         }
         await supabase

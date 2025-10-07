@@ -42,7 +42,7 @@ class WhatsAppService {
 💰 Amount: ${escrowData.amount} USDC
 🛍️ Item: ${escrowData.description}
 👤 Buyer: ${escrowData.buyerPhone}
-🔐 Escrow ID: ${escrowId}
+🔐 Escrow ID: ${escrowData.escrowId}
 
 I've sent funding instructions to the buyer. You'll be notified once they've sent the payment to the secure escrow contract.
 
@@ -60,7 +60,7 @@ Seller has created an escrow for you:
 🔐 Escrow ID: ${escrowData.escrowId}
 
 *Your funds are protected!* 🔒
-Reply "fund ${escrowData.escrowId}" to transfer USDC from your BasePay wallet into the secure escrow.
+To fund this escrow, use the simulator's "Fund Escrow" action or send the exact amount of USDC to the contract from your connected wallet.
 
 Need help? Reply "help"`;
         
@@ -136,8 +136,8 @@ Please be ready to provide any necessary evidence like photos, videos, or commun
 *CREATE ESCROW (Dashboard only):*
 Use the web dashboard to create a new escrow transaction.
 
-*FUND ESCROW (Buyer):*
-fund [escrow-id]
+*FUND ESCROW (Dashboard only):*
+Use the "Fund Escrow" button in the simulator to fund an escrow from the buyer's wallet.
 
 *CONFIRM DELIVERY (Buyer):*
 confirm [escrow-id]

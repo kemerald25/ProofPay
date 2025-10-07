@@ -27,7 +27,6 @@ import {
 import { Loader2 } from "lucide-react";
 import React from "react";
 import EscrowService from "@/services/escrow.service"; // We need a way to call the service from the client.
-                                                       // A server action would be ideal.
 
 // Placeholder for a server action. In a real app, this would be in an actions.ts file.
 async function createEscrowAction(values: z.infer<typeof formSchema>) {

@@ -6,38 +6,13 @@ import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
 import UserService from '@/services/user.service';
 
-async function handleCreate(from: string, args: string[]) {
-    // New step-by-step creation is handled on the client.
-    // This maintains the old single-line command for direct API testing if needed.
-    if (args.length < 3) {
-      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item>');
-    }
-    const buyerPhone = args[0];
-    const amount = parseFloat(args[1]);
-    const description = args.slice(2).join(' ');
-
-    if (isNaN(amount) || !description || !buyerPhone) {
-        throw new Error('Invalid create format.');
-    }
-
-    const seller = await UserService.getUserByPhone(from);
-    if (!seller || !seller.wallet_address) {
-        throw new Error("Seller wallet not found. Please ensure you've interacted with the app before to generate a wallet.");
-    }
-
-    const escrowData = await EscrowService.createEscrow({
-        sellerPhone: from,
-        buyerPhone,
-        amount,
-        description,
-    });
-    
-    await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowData, buyerPhone });
-    await WhatsAppService.sendPaymentRequestToBuyer(buyerPhone, {
-        amount: escrowData.amount,
-        description: escrowData.description,
-        escrowId: escrowData.escrowId,
-    });
+async function handleCreateWallet(from: string) {
+    const user = await UserService.getOrCreateUser(from);
+    await WhatsAppService.sendMessage(from, `✅ Wallet ready!\nAddress: ${user.wallet_address}`);
+    return {
+        message: 'Wallet created or already exists.',
+        wallet_address: user.wallet_address,
+    };
 }
 
 async function handleConfirm(from: string, escrowId: string) {
@@ -57,7 +32,7 @@ async function handleDispute(from: string, escrowId: string) {
 async function handleHistory(from: string) {
     const user = await UserService.getUserByPhone(from);
     if (!user) {
-      await WhatsAppService.sendMessage(from, "User not found. Please create an escrow first to register.");
+      await WhatsAppService.sendMessage(from, "User not found. Please create a wallet first by sending '/createwallet'.");
       return;
     }
 
@@ -83,28 +58,25 @@ async function handleIncomingMessage(from: string, originalMessage: string) {
     const command = parts[0].toLowerCase();
     const args = parts.slice(1);
     
-    if (command.startsWith('+')) {
-        await handleCreate(from, [command, ...args]);
-    } else {
-        const escrowId = args[0];
-
-        switch (command) {
-            case 'confirm':
-                await handleConfirm(from, escrowId);
-                break;
-            case 'dispute':
-                await handleDispute(from, escrowId);
-                break;
-            case 'help':
-                await WhatsAppService.sendHelpMessage(from);
-                break;
-            case 'history':
-                await handleHistory(from);
-                break;
-            default:
-                await WhatsAppService.sendMessage(from, 'Sorry, I didn\'t understand that command. Reply "help" for a list of commands.');
-                break;
-        }
+    switch (command) {
+        case 'createwallet':
+        case '/createwallet':
+            return await handleCreateWallet(from);
+        case 'confirm':
+            await handleConfirm(from, args[0]);
+            break;
+        case 'dispute':
+            await handleDispute(from, args[0]);
+            break;
+        case 'help':
+            await WhatsAppService.sendHelpMessage(from);
+            break;
+        case 'history':
+            await handleHistory(from);
+            break;
+        default:
+            await WhatsAppService.sendMessage(from, 'Sorry, I didn\'t understand that command. Reply "help" for a list of commands.');
+            break;
     }
 }
 
@@ -124,9 +96,9 @@ export async function POST(req: NextRequest) {
   const message = body.message;
 
   try {
-    await handleIncomingMessage(from, message);
+    const commandResult = await handleIncomingMessage(from, message);
     WhatsAppService.sendMessage = originalSendMessage;
-    return NextResponse.json({ replies: messageQueue });
+    return NextResponse.json({ replies: messageQueue, ...commandResult });
 
   } catch (error: any) {
     console.error("Simulator API Error:", error);
@@ -141,3 +113,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ replies: [errorReply] }, { status: 200 });
   }
 }
+
