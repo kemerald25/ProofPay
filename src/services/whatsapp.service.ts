@@ -1,3 +1,4 @@
+
 import twilio from 'twilio';
 import { Sentry } from '@/config/sentry';
 
@@ -34,6 +35,31 @@ class WhatsAppService {
             console.error('WhatsApp send error:', error);
             throw error;
         }
+    }
+
+    async sendEscrowCreatedToSeller(sellerPhone: string, escrow: any) {
+        const message = `🚀 Escrow Created!\n\n*ID:* ${escrow.id}\n*Item:* ${escrow.item_description}\n*Amount:* ${escrow.amount} USDC\n*Buyer:* ${escrow.buyerPhone}\n\nYou'll be notified when the buyer funds the escrow.`;
+        return this.sendMessage(sellerPhone, message);
+    }
+
+    async sendPaymentRequestToBuyer(buyerPhone: string, escrow: any) {
+        const message = `Action Required: Fund Escrow\n\n*ID:* ${escrow.id}\n*Item:* ${escrow.item_description}\n*Amount:* ${escrow.amount} USDC\n\nTo proceed, please fund your wallet and then use the fund command either here or in the simulator.`;
+        return this.sendMessage(buyerPhone, message);
+    }
+    
+    async sendPaymentConfirmed(phone: string, role: 'buyer' | 'seller', amount: number, escrowId: string) {
+        let message;
+        if (role === 'buyer') {
+            message = `✅ Payment of ${amount} USDC confirmed for escrow *${escrowId}*.\n\nThe seller has been notified to send the item. We will hold the funds until you confirm delivery.`;
+        } else {
+            message = `✅ Buyer has funded the escrow *${escrowId}* with ${amount} USDC.\n\nPlease proceed with sending the item. Funds will be released to you upon buyer's confirmation.`;
+        }
+        return this.sendMessage(phone, message);
+    }
+
+    async sendDisputeRaised(phone: string, escrowId: string) {
+        const message = `❗️ A dispute has been raised for escrow *${escrowId}*.\n\nOur team will review the case and contact both parties. Please check your email for further instructions.`;
+        return this.sendMessage(phone, message);
     }
     
     async getHelpMessage(): Promise<string> {

@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { Sentry } from '@/config/sentry';
 import { PrivyClient } from '@privy-io/server-auth';
@@ -14,46 +15,53 @@ const web3Storage = new Web3Storage({ token: process.env.WEB3_STORAGE_TOKEN! });
 
 
 class UserService {
-    
+
     async getOrCreateUser(phoneNumber: string) {
         try {
-            const { data: existing } = await supabase
+            // First, check if user exists in our database
+            let { data: existingUser } = await supabase
                 .from('users')
                 .select('*')
                 .eq('phone_number', phoneNumber)
                 .single();
-            
-            if (existing) {
-                 // Even if user exists, we get their latest wallet info from Privy
-                 const privyUser = await privy.getUser(existing.privy_user_id);
-                 if (!privyUser.wallet) {
-                     // This case might happen if wallet was unlinked. We can try to relink or create.
-                     await privy.linkPhone({userId: privyUser.id, phone: phoneNumber});
-                 }
-                 const wallet = privyUser.wallet || (await privy.createWallet({userId: privyUser.id}));
 
-                 if (wallet.address !== existing.wallet_address) {
-                     const { data: updatedUser } = await supabase.from('users').update({ wallet_address: wallet.address }).eq('id', existing.id).select().single();
-                     return updatedUser;
-                 }
-                return existing;
+            if (existingUser) {
+                console.log(`[USER] Found existing user for ${phoneNumber}`);
+                const privyUser = await privy.getUser(existingUser.privy_user_id);
+                if (!privyUser.wallet) {
+                     await privy.createWallet({userId: privyUser.id});
+                }
+                const wallet = privyUser.wallet || (await privy.getUser(privyUser.id).then(u => u.wallet));
+
+                if (wallet && wallet.address !== existingUser.wallet_address) {
+                    const { data: updatedUser } = await supabase
+                        .from('users')
+                        .update({ wallet_address: wallet.address })
+                        .eq('id', existingUser.id)
+                        .select()
+                        .single();
+                    return updatedUser;
+                }
+                return existingUser;
             }
-            
-            // Create new user with Privy
-            const privyUser = await privy.getOrCreateUser({ create: { phone: phoneNumber } });
-            
-            if (!privyUser.wallet) {
-                await privy.createWallet({userId: privyUser.id});
-            }
-            
-            const wallet = await privy.getUser(privyUser.id).then(u => u.wallet);
+
+            // If not, create a new user via Privy
+            console.log(`[USER] No user found for ${phoneNumber}, creating new one...`);
+            const newUserRequest = {
+                create_embedded_wallet: true,
+                linked_accounts: [{ type: 'phone', phone_number: phoneNumber }]
+            } as const;
+
+            const privyUser = await privy.createUser(newUserRequest);
+            const wallet = privyUser.wallet;
 
             if (!wallet) {
-                throw new Error("Failed to create or retrieve Privy wallet.");
+                throw new Error("Failed to create or retrieve Privy wallet for new user.");
             }
+             console.log(`[USER] Privy user and wallet created: ${privyUser.id}, ${wallet.address}`);
 
-            // Create new user in our database
-            const { data: newUser, error } = await supabase
+            // Store new user in our database
+            const { data: newUser, error: insertError } = await supabase
                 .from('users')
                 .insert({
                     phone_number: phoneNumber,
@@ -62,8 +70,9 @@ class UserService {
                 })
                 .select()
                 .single();
-            
-            if (error) throw error;
+
+            if (insertError) throw insertError;
+            console.log(`[USER] User stored in Supabase with ID: ${newUser.id}`);
 
             // Upload metadata to IPFS
             try {
@@ -71,16 +80,21 @@ class UserService {
                 const cid = await web3Storage.put([new File([JSON.stringify(metadata)], 'wallet.json')]);
                 await supabase.from('users').update({ ipfs_cid: cid }).eq('id', newUser.id);
                 newUser.ipfs_cid = cid;
+                 console.log(`[USER] Wallet metadata uploaded to IPFS: ${cid}`);
             } catch (ipfsError) {
-                console.error("IPFS upload failed, continuing without it:", ipfsError);
+                console.error("[USER] IPFS upload failed, continuing without it:", ipfsError);
                 Sentry.captureException(ipfsError);
             }
-            
+
             return newUser;
         } catch(error) {
             Sentry.captureException(error);
-            console.error("Error in getOrCreateUser:", error);
-            throw error;
+            console.error("[USER] Error in getOrCreateUser:", error);
+            const privyError = error as any;
+            if (privyError.response && privyError.response.data) {
+                console.error("Privy API Error:", privyError.response.data);
+            }
+            throw new Error(`Failed to get or create user: ${ (error as Error).message}`);
         }
     }
     
