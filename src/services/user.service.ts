@@ -4,6 +4,7 @@ import { Sentry } from '@/config/sentry';
 import { PrivyClient } from '@privy-io/server-auth';
 import { Web3Storage, File } from 'web3.storage';
 import { User } from '@/lib/definitions';
+import { ethers } from 'ethers';
 
 const supabase = createClient(
     process.env.SUPABASE_URL!,
@@ -29,13 +30,6 @@ class UserService {
             if (existingUser) {
                 console.log(`[USER] Found existing user for ${phoneNumber}`);
                 const privyUser = await privy.getUser(existingUser.privy_user_id);
-                if (!privyUser.wallet) {
-                     // This might happen if the wallet was not created initially.
-                     // The createUser call below is idempotent for linked_accounts
-                     // but we need to ensure the wallet exists.
-                     // A simple way is to just call create again, Privy handles this.
-                     // A more complex way would be a specific call to create a wallet if missing.
-                }
                 const wallet = privyUser.wallet || (await privy.getUser(privyUser.id).then(u => u.wallet));
 
                 if (wallet && wallet.address !== existingUser.wallet_address) {
@@ -45,7 +39,7 @@ class UserService {
                         .eq('id', existingUser.id)
                         .select()
                         .single();
-                    return updatedUser;
+                    return updatedUser!;
                 }
                 return existingUser;
             }
@@ -64,7 +58,7 @@ class UserService {
                 },
                 body: JSON.stringify({
                     create_embedded_wallet: true,
-                    linked_accounts: [{ type: 'phone', phone_number: phoneNumber }]
+                    linked_accounts: [{ type: 'phone', number: phoneNumber }]
                 })
             });
 
@@ -96,21 +90,21 @@ class UserService {
                 .single();
 
             if (insertError) throw insertError;
-            console.log(`[USER] User stored in Supabase with ID: ${newUser.id}`);
+            console.log(`[USER] User stored in Supabase with ID: ${newUser!.id}`);
 
             // Upload metadata to IPFS
             try {
                 const metadata = { phoneNumber, walletAddress: wallet.address, createdAt: new Date().toISOString() };
                 const cid = await web3Storage.put([new File([JSON.stringify(metadata)], 'wallet.json')]);
-                await supabase.from('users').update({ ipfs_cid: cid }).eq('id', newUser.id);
-                newUser.ipfs_cid = cid;
+                await supabase.from('users').update({ ipfs_cid: cid }).eq('id', newUser!.id);
+                newUser!.ipfs_cid = cid;
                  console.log(`[USER] Wallet metadata uploaded to IPFS: ${cid}`);
             } catch (ipfsError) {
                 console.error("[USER] IPFS upload failed, continuing without it:", ipfsError);
                 Sentry.captureException(ipfsError);
             }
 
-            return newUser;
+            return newUser!;
         } catch(error) {
             Sentry.captureException(error);
             console.error("[USER] Error in getOrCreateUser:", error);
