@@ -157,7 +157,7 @@ class EscrowService {
             
             if (!escrow) throw new Error('Escrow not found');
             if (escrow.buyer_phone !== callingPhone) throw new Error('Unauthorized: Only the buyer can release funds.');
-            if (escrow.status !== 'FUNDED') throw new Error('Escrow not funded');
+            if (escrow.status !== 'FUNDED') throw new Error('Escrow is not in a fundable state.');
             if (escrow.dispute_raised) throw new Error('Dispute is active');
             
             const txHash = await BlockchainService.releaseFunds(escrow.escrow_id);
