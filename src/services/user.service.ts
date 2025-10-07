@@ -1,4 +1,5 @@
 
+
 import { createClient } from '@supabase/supabase-js';
 import { Sentry } from '@/config/sentry';
 import { PrivyClient } from '@privy-io/server-auth';
@@ -45,19 +46,6 @@ class UserService {
             const existingUser = await this.getUserByPhone(phoneNumber);
             if (existingUser) {
                  console.log(`[USER] Found existing user for ${phoneNumber}`);
-                 // Make sure wallet address is up to date.
-                 const privyUser = await privy.getUser(existingUser.privy_user_id);
-                 const wallet = privyUser.wallet || (privyUser.linkedAccounts.find(a => a.type === 'wallet') as any);
-                 
-                 if (wallet && wallet.address !== existingUser.wallet_address) {
-                     const { data: updatedUser } = await supabase
-                         .from('users')
-                         .update({ wallet_address: wallet.address })
-                         .eq('id', existingUser.id)
-                         .select()
-                         .single();
-                     return updatedUser!;
-                 }
                 return existingUser;
             }
 
@@ -120,7 +108,7 @@ class UserService {
             .single();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
-            console.error('Error fetching user by phone:', error);
+            console.error('Error fetching user by phone from Supabase:', error);
             Sentry.captureException(error);
             throw error;
         }
