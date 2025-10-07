@@ -129,13 +129,12 @@ contract ProofPayEscrow is ReentrancyGuard, Ownable {
     }
     
     /**
-     * @notice Release funds to seller (buyer confirms delivery)
+     * @notice Release funds to seller (owner confirms delivery on behalf of buyer)
      * @param escrowId The escrow identifier
      */
-    function releaseFunds(bytes32 escrowId) external nonReentrant {
+    function releaseFunds(bytes32 escrowId) external onlyOwner nonReentrant {
         Escrow storage escrow = escrows[escrowId];
         require(escrow.status == EscrowStatus.FUNDED, "Escrow not funded");
-        require(msg.sender == escrow.buyer, "Only buyer can release");
         require(!escrow.disputeRaised, "Dispute is active");
         
         _completEscrow(escrowId);
