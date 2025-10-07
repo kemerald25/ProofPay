@@ -26,24 +26,7 @@ import {
   } from "@/components/ui/form";
 import { Loader2 } from "lucide-react";
 import React from "react";
-import EscrowService from "@/services/escrow.service"; // We need a way to call the service from the client.
-
-// Placeholder for a server action. In a real app, this would be in an actions.ts file.
-async function createEscrowAction(values: z.infer<typeof formSchema>) {
-    'use server';
-    // This assumes the logged-in user's phone is available on the server-side,
-    // perhaps through session management, which is not implemented here.
-    // For now, we'll hardcode a seller phone for demonstration.
-    const sellerPhone = process.env.SELLER_PHONE_FOR_DEMO || '+15550009876'; 
-    
-    await EscrowService.createEscrow({
-        sellerPhone,
-        buyerPhone: values.buyerPhone,
-        amount: values.amount,
-        description: values.description,
-    });
-}
-
+import { createEscrowAction } from "./actions";
 
 const formSchema = z.object({
     buyerPhone: z.string().min(10, "Please enter a valid phone number with country code, e.g., +14155552671."),
