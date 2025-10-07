@@ -46,15 +46,8 @@ class BlockchainListener {
         }
 
         try {
-            // Define the event filter for EscrowFunded
-            // The first argument to the filter corresponds to the first indexed event parameter (escrowId).
-            // It needs to be an array of values to match against.
             const eventFilter = this.escrowContract.filters.EscrowFunded(escrowIds);
 
-            // Query logs from a reasonable block range. For a real-time system,
-            // you'd manage the 'fromBlock' more carefully, but for a cron job,
-            // looking at recent blocks is sufficient. E.g., last 24 hours.
-            // Base Sepolia block time is ~2s, so 43200 blocks is ~24 hours.
             const fromBlock = await this.provider!.getBlockNumber() - 43200;
 
             const logs = await this.escrowContract.queryFilter(eventFilter, fromBlock, 'latest');
@@ -63,14 +56,11 @@ class BlockchainListener {
 
             for (const log of logs) {
                 if (log instanceof ethers.EventLog) {
-                    const parsed = this.escrowContract.interface.parseLog(log);
-                    if (parsed && parsed.name === 'EscrowFunded') {
-                         parsedEvents.push({
-                            escrowId: parsed.args.escrowId,
-                            amount: parsed.args.amount,
-                            log: log,
-                        });
-                    }
+                     parsedEvents.push({
+                        escrowId: log.args.escrowId,
+                        amount: log.args.amount,
+                        log: log,
+                    });
                 }
             }
 
@@ -84,3 +74,4 @@ class BlockchainListener {
 }
 
 export default new BlockchainListener();
+    
