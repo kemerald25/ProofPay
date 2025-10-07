@@ -155,6 +155,9 @@ class EscrowService {
     
     async releaseFunds(escrowId: string, callingPhone: string) {
         try {
+            // First, ensure the payment status is up-to-date
+            await this.checkPaymentStatus(escrowId);
+            
             const escrow = await this.getEscrow(escrowId);
             
             if (!escrow) throw new Error('Escrow not found');
