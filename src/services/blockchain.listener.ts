@@ -3,25 +3,18 @@ import EscrowArtifact from '../contracts/ProofPayEscrow.json';
 
 const EscrowABI = EscrowArtifact.abi;
 
-interface EscrowFundedEvent {
-    escrowId: string;
-    amount: bigint;
-    log: ethers.Log;
-}
-
 class BlockchainListener {
     private provider: ethers.JsonRpcProvider | null = null;
     private escrowContract: ethers.Contract | null = null;
-    private contractAddress = process.env.ESCROW_CONTRACT_ADDRESS!;
     
     constructor() {
-        if (!process.env.BASE_RPC_URL || !this.contractAddress) {
+        if (!process.env.BASE_RPC_URL || !process.env.ESCROW_CONTRACT_ADDRESS) {
             console.warn("Blockchain environment variables not set. BlockchainListener will not be initialized.");
             return;
         }
         this.provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
         this.escrowContract = new ethers.Contract(
-            this.contractAddress,
+            process.env.ESCROW_CONTRACT_ADDRESS,
             EscrowABI,
             this.provider
         );
@@ -32,49 +25,114 @@ class BlockchainListener {
     }
 
     /**
-     * Fetches 'EscrowFunded' events for a specific list of escrow IDs.
-     * @param escrowIds - An array of blockchain `escrow_id`s to check.
-     * @returns A promise that resolves to an array of found funding events.
+     * Get EscrowFunded events for specific escrow IDs
+     * @param escrowIds Array of blockchain escrow IDs to check
+     * @returns Array of funding events with escrowId and amount
      */
-    async getEscrowFundedEvents(escrowIds: string[]): Promise<EscrowFundedEvent[]> {
+    async getEscrowFundedEvents(escrowIds: string[]): Promise<Array<{ escrowId: string; amount: string; blockNumber: number }>> {
         if (!this.isInitialized() || !this.escrowContract) {
-            throw new Error('BlockchainListener not initialized');
-        }
-        
-        if (escrowIds.length === 0) {
+            console.warn('BlockchainListener not initialized');
             return [];
         }
 
         try {
-            // The first argument to the filter corresponds to the first indexed event parameter (escrowId).
-            // Ethers.js expects an array of values for the 'in' condition.
-            const eventFilter = this.escrowContract.filters.EscrowFunded(escrowIds);
+            // Get events from the last 10,000 blocks (adjust as needed)
+            const currentBlock = await this.provider!.getBlockNumber();
+            const fromBlock = Math.max(0, currentBlock - 10000);
 
-            // Check a reasonable range of recent blocks. e.g., last day on Base Sepolia (approx 43200 blocks)
-            const fromBlock = await this.provider!.getBlockNumber() - 43200;
+            // Query EscrowFunded events
+            const filter = this.escrowContract.filters.EscrowFunded();
+            const events = await this.escrowContract.queryFilter(filter, fromBlock, currentBlock);
 
-            const logs = await this.escrowContract.queryFilter(eventFilter, fromBlock, 'latest');
+            const fundedEvents: Array<{ escrowId: string; amount: string; blockNumber: number }> = [];
 
-            const parsedEvents: EscrowFundedEvent[] = [];
+            for (const event of events) {
+                const parsedLog = this.escrowContract.interface.parseLog({
+                    topics: [...event.topics],
+                    data: event.data
+                });
 
-            for (const log of logs) {
-                if (log instanceof ethers.EventLog) {
-                     parsedEvents.push({
-                        escrowId: log.args.escrowId,
-                        amount: log.args.amount,
-                        log: log,
+                if (!parsedLog) continue;
+
+                const escrowId = parsedLog.args.escrowId;
+                const amount = parsedLog.args.amount;
+
+                // Only include events for escrows we're tracking
+                if (escrowIds.includes(escrowId)) {
+                    fundedEvents.push({
+                        escrowId,
+                        amount: ethers.formatUnits(amount, 6), // USDC has 6 decimals
+                        blockNumber: event.blockNumber
                     });
                 }
             }
 
-            return parsedEvents;
+            return fundedEvents;
 
         } catch (error) {
             console.error('Error fetching EscrowFunded events:', error);
-            throw new Error('Failed to fetch funding events from the blockchain.');
+            return [];
         }
+    }
+
+    /**
+     * Get all events for a specific escrow
+     * @param escrowId Blockchain escrow ID
+     */
+    async getEscrowEvents(escrowId: string) {
+        if (!this.isInitialized() || !this.escrowContract) {
+            return [];
+        }
+
+        try {
+            const currentBlock = await this.provider!.getBlockNumber();
+            const fromBlock = Math.max(0, currentBlock - 10000);
+
+            // Get all contract events
+            const allEvents = await this.escrowContract.queryFilter('*', fromBlock, currentBlock);
+
+            const escrowEvents = allEvents
+                .map(event => {
+                    try {
+                        const parsed = this.escrowContract!.interface.parseLog({
+                            topics: [...event.topics],
+                            data: event.data
+                        });
+                        
+                        if (!parsed) return null;
+                        
+                        // Check if this event is for our escrow
+                        if (parsed.args.escrowId === escrowId) {
+                            return {
+                                name: parsed.name,
+                                args: parsed.args,
+                                blockNumber: event.blockNumber,
+                                transactionHash: event.transactionHash
+                            };
+                        }
+                        return null;
+                    } catch (e) {
+                        return null;
+                    }
+                })
+                .filter(e => e !== null);
+
+            return escrowEvents;
+
+        } catch (error) {
+            console.error('Error fetching escrow events:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Check if a specific escrow has been funded
+     * @param escrowId Blockchain escrow ID
+     */
+    async isEscrowFunded(escrowId: string): Promise<boolean> {
+        const events = await this.getEscrowFundedEvents([escrowId]);
+        return events.length > 0;
     }
 }
 
 export default new BlockchainListener();
-    

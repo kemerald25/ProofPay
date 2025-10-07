@@ -1,4 +1,4 @@
-// This form would use server actions to call the EscrowService
+// src/app/dashboard/create/page.tsx
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -28,12 +26,28 @@ import {
   } from "@/components/ui/form";
 import { Loader2 } from "lucide-react";
 import React from "react";
+import EscrowService from "@/services/escrow.service"; // We need a way to call the service from the client.
+                                                       // A server action would be ideal.
+
+// Placeholder for a server action. In a real app, this would be in an actions.ts file.
+async function createEscrowAction(values: z.infer<typeof formSchema>) {
+    'use server';
+    // This assumes the logged-in user's phone is available on the server-side,
+    // perhaps through session management, which is not implemented here.
+    // For now, we'll hardcode a seller phone for demonstration.
+    const sellerPhone = process.env.SELLER_PHONE_FOR_DEMO || '+15550009876'; 
+    
+    await EscrowService.createEscrow({
+        sellerPhone,
+        buyerPhone: values.buyerPhone,
+        amount: values.amount,
+        description: values.description,
+    });
+}
+
 
 const formSchema = z.object({
-    buyerPhone: z.string().min(10, "Please enter a valid phone number with country code."),
-    sellerWallet: z.string().refine((val) => val.startsWith("0x") && val.length === 42, {
-        message: "Please enter a valid Ethereum wallet address.",
-    }),
+    buyerPhone: z.string().min(10, "Please enter a valid phone number with country code, e.g., +14155552671."),
     amount: z.coerce.number().positive("Amount must be positive."),
     description: z.string().min(3, "Please provide a short description.").max(100),
   });
@@ -46,7 +60,6 @@ export default function CreateEscrowPage() {
         resolver: zodResolver(formSchema),
         defaultValues: {
             buyerPhone: "",
-            sellerWallet: "",
             amount: 0,
             description: "",
         },
@@ -54,19 +67,22 @@ export default function CreateEscrowPage() {
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
-        // Here you would call a server action
-        // await createEscrowAction(values);
-        console.log(values);
-        
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        toast({
-          title: "Escrow Created!",
-          description: "Instructions have been sent to the buyer via WhatsApp.",
-        });
-        form.reset();
-        setIsSubmitting(false);
+        try {
+            await createEscrowAction(values);
+            toast({
+              title: "Escrow Created!",
+              description: "Instructions have been sent to the buyer and seller via WhatsApp.",
+            });
+            form.reset();
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Error Creating Escrow',
+                description: error.message || 'An unknown error occurred.',
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
     }
 
   return (
@@ -78,7 +94,7 @@ export default function CreateEscrowPage() {
                     <CardHeader>
                     <CardTitle>Escrow Details</CardTitle>
                     <CardDescription>
-                        Fill in the details below to create a new secure escrow. The seller's phone will be your own.
+                        Fill in the details below to create a new secure escrow. Your phone number will be used as the seller's contact.
                     </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -92,23 +108,7 @@ export default function CreateEscrowPage() {
                                     <Input placeholder="+14155552671" {...field} />
                                 </FormControl>
                                 <FormDescription>
-                                    Include the country code.
-                                </FormDescription>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="sellerWallet"
-                            render={({ field }) => (
-                                <FormItem>
-                                <FormLabel>Seller's Wallet Address</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="0x..." {...field} />
-                                </FormControl>
-                                <FormDescription>
-                                    This is where the funds will be sent upon release.
+                                    Include the country code. This is where notifications will be sent.
                                 </FormDescription>
                                 <FormMessage />
                                 </FormItem>
@@ -134,7 +134,7 @@ export default function CreateEscrowPage() {
                                 <FormItem>
                                 <FormLabel>Item Description</FormLabel>
                                 <FormControl>
-                                    <Textarea
+                                    <Input
                                         placeholder="e.g., 'Vintage Leather Jacket, Size M'"
                                         {...field}
                                     />

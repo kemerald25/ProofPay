@@ -1,7 +1,8 @@
 export type User = {
     id: string;
     phone_number: string;
-    wallet_address?: string;
+    wallet_address: string; // Made mandatory
+    private_key: string;    // Added to store encrypted private key
     username?: string;
     created_at: string;
     total_transactions: number;
@@ -18,7 +19,7 @@ export type Escrow = {
     seller_id: string;
     buyer_phone: string;
     seller_phone: string;
-    buyer_wallet?: string;
+    buyer_wallet: string; // Made mandatory
     seller_wallet: string;
     amount: string;
     status: 'CREATED' | 'FUNDED' | 'COMPLETED' | 'DISPUTED' | 'REFUNDED' | 'CANCELLED';

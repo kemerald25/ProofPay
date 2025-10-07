@@ -6,19 +6,23 @@ import DisputeService from '@/services/dispute.service';
 import WhatsAppService from '@/services/whatsapp.service';
 import UserService from '@/services/user.service';
 
-// Format: +<buyer-phone> <amount> <seller-wallet> <item>
-async function handleCreate(from: string, message: string) {
-    const parts = message.trim().split(' ');
-    if (parts.length < 4 || !parts[0].startsWith('+') || !parts[2].startsWith('0x')) {
-      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
+async function handleCreate(from: string, args: string[]) {
+    // New step-by-step creation is handled on the client.
+    // This maintains the old single-line command for direct API testing if needed.
+    if (args.length < 3) {
+      throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <item>');
     }
-    const buyerPhone = parts[0];
-    const amount = parseFloat(parts[1]);
-    const sellerWallet = parts[2];
-    const description = parts.slice(3).join(' ');
+    const buyerPhone = args[0];
+    const amount = parseFloat(args[1]);
+    const description = args.slice(2).join(' ');
 
-    if (isNaN(amount) || !description || !sellerWallet) {
-        throw new Error('Invalid create format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
+    if (isNaN(amount) || !description || !buyerPhone) {
+        throw new Error('Invalid create format.');
+    }
+
+    const seller = await UserService.getUserByPhone(from);
+    if (!seller || !seller.wallet_address) {
+        throw new Error("Seller wallet not found. Please ensure you've interacted with the app before to generate a wallet.");
     }
 
     const escrowData = await EscrowService.createEscrow({
@@ -26,22 +30,23 @@ async function handleCreate(from: string, message: string) {
         buyerPhone,
         amount,
         description,
-        sellerWallet,
     });
     
     await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowData, buyerPhone });
-    await WhatsAppService.sendPaymentRequestToBuyer(buyerPhone, escrowData);
+    await WhatsAppService.sendPaymentRequestToBuyer(buyerPhone, {
+        amount: escrowData.amount,
+        description: escrowData.description,
+        escrowId: escrowData.escrowId,
+    });
 }
 
 async function handleConfirm(from: string, escrowId: string) {
   if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "confirm BP-123XYZ"');
-  // The 'from' in the simulator is the number in the input field, which is the buyer in this case.
   await EscrowService.releaseFunds(escrowId, from);
 }
 
 async function handleDispute(from: string, escrowId: string) {
   if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "dispute BP-123XYZ"');
-  // The 'from' is the initiator of the dispute.
   await DisputeService.raiseDispute({ 
       escrowId: escrowId,
       raisedByPhone: from,
@@ -74,15 +79,14 @@ async function handleHistory(from: string) {
 
 async function handleIncomingMessage(from: string, originalMessage: string) {
     const message = originalMessage.trim();
-    const messageForCommand = originalMessage.toLowerCase();
-    const parts = originalMessage.split(' ');
+    const parts = message.split(' ');
     const command = parts[0].toLowerCase();
+    const args = parts.slice(1);
     
-    if (message.startsWith('+')) {
-        await handleCreate(from, message);
+    if (command.startsWith('+')) {
+        await handleCreate(from, [command, ...args]);
     } else {
-        const args = parts.slice(1);
-        const escrowId = args[0]; // Keep original case for ID
+        const escrowId = args[0];
 
         switch (command) {
             case 'confirm':
@@ -98,7 +102,7 @@ async function handleIncomingMessage(from: string, originalMessage: string) {
                 await handleHistory(from);
                 break;
             default:
-                await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
+                await WhatsAppService.sendMessage(from, 'Sorry, I didn\'t understand that command. Reply "help" for a list of commands.');
                 break;
         }
     }
@@ -109,12 +113,9 @@ export async function POST(req: NextRequest) {
   const messageQueue: any[] = [];
   const originalSendMessage = WhatsAppService.sendMessage;
   
-  // Intercept messages for this request only
   WhatsAppService.sendMessage = async (to: string, body: string) => {
       console.log(`Intercepted WhatsApp message to ${to}: ${body}`);
       messageQueue.push({ to, body });
-      // In the simulator, we don't need a real SID, so we return a promise 
-      // that resolves to a simulated SID to match the function signature.
       return Promise.resolve(`simulated_message_sid_${Date.now()}`);
   };
 
@@ -124,19 +125,14 @@ export async function POST(req: NextRequest) {
 
   try {
     await handleIncomingMessage(from, message);
-    
-    // Restore original function
     WhatsAppService.sendMessage = originalSendMessage;
     return NextResponse.json({ replies: messageQueue });
 
   } catch (error: any) {
     console.error("Simulator API Error:", error);
     Sentry.captureException(error);
-    
-    // Restore original function even on error
     WhatsAppService.sendMessage = originalSendMessage;
 
-    // We must ensure we reply with a valid JSON response, even on error.
     const errorReply = {
       to: from,
       body: `An error occurred: ${error.message}`

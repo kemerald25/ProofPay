@@ -5,7 +5,6 @@ import WhatsAppService from './whatsapp.service';
 import UserService from './user.service';
 import { Sentry } from '@/config/sentry';
 import { ethers } from 'ethers';
-import BlockchainListener from './blockchain.listener';
 
 const supabase = createClient(
     process.env.SUPABASE_URL!,
@@ -19,49 +18,31 @@ class EscrowService {
         buyerPhone: string;
         amount: number;
         description?: string;
-        sellerWallet?: string;
     }) {
         try {
-            // Get or create users
+            // Get or create users and their wallets
             const seller = await UserService.getOrCreateUser(params.sellerPhone);
             const buyer = await UserService.getOrCreateUser(params.buyerPhone);
             
-            // Validate seller has wallet
-            const sellerWallet = params.sellerWallet || seller.wallet_address;
-            if (!sellerWallet) {
-                 throw new Error('Seller must provide a wallet address.');
-            }
+            const sellerWallet = seller.wallet_address;
+            const buyerWallet = buyer.wallet_address;
             
-            // If the user's wallet was just registered, update it
-            if (params.sellerWallet && !seller.wallet_address) {
-                await UserService.updateWalletAddress(seller.id, params.sellerWallet);
-            }
-            
-            // If buyer has a wallet, use it, otherwise generate a temporary one
-            const buyerWallet = buyer.wallet_address || ethers.Wallet.createRandom().address;
-             if (!buyer.wallet_address) {
-                await UserService.updateWalletAddress(buyer.id, buyerWallet);
-            }
-            
-            // Create escrow on blockchain
+            // Create escrow on blockchain using the service wallet
             const { escrowId, txHash } = await BlockchainService.createEscrow(
                 buyerWallet,
                 sellerWallet,
                 params.amount.toString()
             );
             
-            // Generate short ID for easy reference
             const shortId = this.generateShortId();
             
-            // Calculate auto-release time (7 days)
             const autoReleaseTime = new Date();
             autoReleaseTime.setDate(autoReleaseTime.getDate() + 7);
             
-            // Save to database
             const { data, error } = await supabase
                 .from('escrows')
                 .insert({
-                    id: shortId, // Using shortId as primary key for easier reference
+                    id: shortId,
                     escrow_id: escrowId,
                     buyer_id: buyer.id,
                     seller_id: seller.id,
@@ -80,16 +61,6 @@ class EscrowService {
             
             if (error) throw error;
             
-            await this.recordTransaction({
-                escrowId: data.id,
-                type: 'CREATE',
-                txHash,
-                fromAddress: sellerWallet,
-                toAddress: process.env.ESCROW_CONTRACT_ADDRESS,
-                amount: params.amount,
-                status: 'PENDING'
-            });
-            
             return {
                 escrowId: data.id,
                 blockchainEscrowId: escrowId,
@@ -97,75 +68,10 @@ class EscrowService {
                 description: params.description,
                 sellerWallet,
                 autoReleaseTime,
-                paymentAddress: process.env.ESCROW_CONTRACT_ADDRESS,
-                usdcAddress: process.env.USDC_CONTRACT_ADDRESS
             };
             
         } catch (error) {
             console.error('Create escrow error:', error);
-            Sentry.captureException(error);
-            throw error;
-        }
-    }
-    
-    async getEscrowByShortId(shortId: string) {
-        const { data } = await supabase
-            .from('escrows')
-            .select('*')
-            .eq('id', shortId)
-            .single();
-        
-        return data;
-    }
-    
-    async releaseFunds(escrowId: string, callingPhone: string) {
-        try {
-            const escrow = await this.getEscrow(escrowId);
-            
-            if (!escrow) throw new Error('Escrow not found');
-            if (escrow.buyer_phone !== callingPhone) throw new Error('Unauthorized: Only the buyer can release funds.');
-            if (escrow.status !== 'FUNDED') throw new Error('Escrow is not in a funded state.');
-            if (escrow.dispute_raised) throw new Error('Dispute is active');
-            
-            const txHash = await BlockchainService.releaseFunds(escrow.escrow_id);
-            
-            await supabase
-                .from('escrows')
-                .update({
-                    status: 'COMPLETED',
-                    completed_at: new Date().toISOString(),
-                    release_tx_hash: txHash
-                })
-                .eq('id', escrowId);
-            
-            await this.recordTransaction({
-                escrowId,
-                type: 'RELEASE',
-                txHash,
-                fromAddress: process.env.ESCROW_CONTRACT_ADDRESS,
-                toAddress: escrow.seller_wallet,
-                amount: Number(escrow.amount),
-                status: 'CONFIRMED'
-            });
-            
-            await UserService.incrementTransactionCount(escrow.buyer_id, true);
-            await UserService.incrementTransactionCount(escrow.seller_id, true);
-            
-            const netAmount = Number(escrow.amount) * 0.995;
-            
-            await WhatsAppService.sendMessage(
-                escrow.seller_phone,
-                `💰 Funds released! You received ${netAmount.toFixed(2)} (after 0.5% fee). Transaction complete!`
-            );
-            
-            await WhatsAppService.sendMessage(
-                escrow.buyer_phone,
-                `✅ Transaction complete! Thanks for using BasePay. 🎉`
-            );
-            
-            return { success: true, txHash };
-            
-        } catch (error) {
             Sentry.captureException(error);
             throw error;
         }
@@ -179,6 +85,76 @@ class EscrowService {
             .single();
         
         return data;
+    }
+
+    async fundEscrow(escrowId: string, buyerPhone: string) {
+        try {
+            const escrow = await this.getEscrow(escrowId);
+            if (!escrow) throw new Error('Escrow not found');
+            if (escrow.buyer_phone !== buyerPhone) throw new Error('Unauthorized: Only the buyer can fund this escrow.');
+            if (escrow.status !== 'CREATED') throw new Error('Escrow is not in CREATED state.');
+
+            const buyer = await UserService.getUserByPhone(buyerPhone);
+            if (!buyer) throw new Error('Buyer user not found.');
+
+            const buyerPrivateKey = await UserService.getDecryptedPrivateKey(buyer.id);
+
+            const txHash = await BlockchainService.fundEscrowAsUser(escrow.escrow_id, escrow.amount.toString(), buyerPrivateKey);
+
+            await this.updateEscrowStatus(escrowId, 'FUNDED', new Date().toISOString());
+
+            await WhatsAppService.sendPaymentConfirmed(escrow.buyer_phone, 'buyer', Number(escrow.amount), escrow.id);
+            await WhatsAppService.sendPaymentConfirmed(escrow.seller_phone, 'seller', Number(escrow.amount), escrow.id);
+            
+            return { success: true, txHash };
+
+        } catch (error) {
+            Sentry.captureException(error);
+            throw error;
+        }
+    }
+    
+    async releaseFunds(escrowId: string, callingPhone: string) {
+        try {
+            const escrow = await this.getEscrow(escrowId);
+            
+            if (!escrow) throw new Error('Escrow not found');
+            if (escrow.buyer_phone !== callingPhone) throw new Error('Unauthorized: Only the buyer can release funds.');
+            if (escrow.status !== 'FUNDED') throw new Error('Escrow is not in a funded state.');
+            if (escrow.dispute_raised) throw new Error('Dispute is active');
+            
+            const txHash = await BlockchainService.ownerReleaseFunds(escrow.escrow_id);
+            
+            await supabase
+                .from('escrows')
+                .update({
+                    status: 'COMPLETED',
+                    completed_at: new Date().toISOString(),
+                    release_tx_hash: txHash
+                })
+                .eq('id', escrowId);
+            
+            await UserService.incrementTransactionCount(escrow.buyer_id, true);
+            await UserService.incrementTransactionCount(escrow.seller_id, true);
+            
+            const netAmount = Number(escrow.amount) * 0.995;
+            
+            await WhatsAppService.sendMessage(
+                escrow.seller_phone,
+                `💰 Funds released! You received ${netAmount.toFixed(2)} USDC (after 0.5% fee). Transaction complete!`
+            );
+            
+            await WhatsAppService.sendMessage(
+                escrow.buyer_phone,
+                `✅ Transaction complete! Thanks for using BasePay. 🎉`
+            );
+            
+            return { success: true, txHash };
+            
+        } catch (error) {
+            Sentry.captureException(error);
+            throw error;
+        }
     }
     
     async updateEscrowStatus(escrowId: string, status: string, fundedAt?: string) {
@@ -201,27 +177,6 @@ class EscrowService {
             .limit(50);
         
         return data || [];
-    }
-    
-    private async recordTransaction(params: {
-        escrowId: string;
-        type: string;
-        txHash: string;
-        fromAddress?: string;
-        toAddress?: string;
-        amount?: number;
-        status?: string;
-    }) {
-        await supabase.from('transactions').insert({
-            escrow_id: params.escrowId,
-            type: params.type,
-            tx_hash: params.txHash,
-            from_address: params.fromAddress,
-            to_address: params.toAddress,
-            amount: params.amount,
-            status: params.status || 'PENDING',
-            confirmed_at: params.status === 'CONFIRMED' ? new Date().toISOString() : null
-        });
     }
     
     private generateShortId(): string {

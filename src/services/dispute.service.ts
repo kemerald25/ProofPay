@@ -21,7 +21,6 @@ class DisputeService {
         evidenceFiles?: Array<{ data: Buffer; filename: string }>;
     }) {
         try {
-            // Get escrow
             const { data: escrow } = await supabase
                 .from('escrows')
                 .select('*')
@@ -32,13 +31,18 @@ class DisputeService {
             if (escrow.status !== 'FUNDED') throw new Error('Escrow not funded');
             if (escrow.dispute_raised) throw new Error('Dispute already raised');
             
-            // Verify caller is buyer or seller
             const isParty = escrow.buyer_phone === params.raisedByPhone || 
                            escrow.seller_phone === params.raisedByPhone;
             
             if (!isParty) throw new Error('Unauthorized');
             
-            // Upload evidence to IPFS if provided
+            const user = await UserService.getUserByPhone(params.raisedByPhone);
+            if (!user) throw new Error('User not found');
+
+            const userPrivateKey = await UserService.getDecryptedPrivateKey(user.id);
+            
+            const txHash = await BlockchainService.raiseDispute(escrow.escrow_id, userPrivateKey);
+            
             let evidenceUrls: string[] = [];
             if (params.evidenceFiles && params.evidenceFiles.length > 0) {
                 evidenceUrls = await Promise.all(
@@ -46,14 +50,6 @@ class DisputeService {
                 );
             }
             
-            // Get user ID
-            const user = await UserService.getUserByPhone(params.raisedByPhone);
-            if (!user) throw new Error('User not found');
-            
-            // Raise dispute on blockchain
-            const txHash = await BlockchainService.raiseDispute(escrow.escrow_id);
-            
-            // Create dispute record
             const { data: dispute, error } = await supabase
                 .from('disputes')
                 .insert({
@@ -69,7 +65,6 @@ class DisputeService {
             
             if (error) throw error;
             
-            // Update escrow
             await supabase
                 .from('escrows')
                 .update({
@@ -80,10 +75,8 @@ class DisputeService {
                 })
                 .eq('id', params.escrowId);
             
-            // Increment user dispute count
             await UserService.incrementDisputeCount(user.id);
             
-            // Notify both parties
             await WhatsAppService.sendDisputeRaised(escrow.buyer_phone, params.escrowId);
             await WhatsAppService.sendDisputeRaised(escrow.seller_phone, params.escrowId);
             
@@ -97,7 +90,6 @@ class DisputeService {
     
     async resolveDispute(disputeId: string, buyerPercentage: number, resolvedBy: string) {
         try {
-            // Get dispute and escrow
             const { data: dispute } = await supabase
                 .from('disputes')
                 .select('*, escrows(*)')
@@ -110,13 +102,11 @@ class DisputeService {
             const escrow = dispute.escrows;
             if (!escrow) throw new Error('Associated escrow not found');
             
-            // Resolve on blockchain
             const txHash = await BlockchainService.resolveDispute(
                 escrow.escrow_id,
                 buyerPercentage
             );
             
-            // Update dispute
             await supabase
                 .from('disputes')
                 .update({
@@ -128,7 +118,6 @@ class DisputeService {
                 })
                 .eq('id', disputeId);
             
-            // Update escrow
             await supabase
                 .from('escrows')
                 .update({
@@ -137,7 +126,6 @@ class DisputeService {
                 })
                 .eq('id', escrow.id);
             
-            // Notify parties
             const buyerAmount = (Number(escrow.amount) * buyerPercentage) / 100;
             const sellerAmount = Number(escrow.amount) - buyerAmount;
             

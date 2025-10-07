@@ -1,12 +1,11 @@
 import { ethers } from 'ethers';
-// Correctly import the full artifact which includes the ABI
 import EscrowArtifact from '../contracts/ProofPayEscrow.json';
 
 const EscrowABI = EscrowArtifact.abi;
 
 class BlockchainService {
     private provider: ethers.JsonRpcProvider | null = null;
-    private wallet: ethers.Wallet | null = null;
+    private serviceWallet: ethers.Wallet | null = null; // The app's main wallet
     private escrowContract: ethers.Contract | null = null;
     
     constructor() {
@@ -15,128 +14,109 @@ class BlockchainService {
             return;
         }
         this.provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
-        this.wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, this.provider);
+        this.serviceWallet = new ethers.Wallet(process.env.PRIVATE_KEY!, this.provider);
         this.escrowContract = new ethers.Contract(
             process.env.ESCROW_CONTRACT_ADDRESS,
             EscrowABI,
-            this.wallet
+            this.serviceWallet // The contract instance is connected to the service wallet by default
         );
     }
     
     private isInitialized(): boolean {
-        return !!this.provider && !!this.wallet && !!this.escrowContract;
+        return !!this.provider && !!this.serviceWallet && !!this.escrowContract;
     }
 
     async createEscrow(
         buyerAddress: string,
         sellerAddress: string,
-        amount: string // in USDC (6 decimals)
+        amount: string // in USDC
     ): Promise<{ escrowId: string; txHash: string }> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const amountInWei = ethers.parseUnits(amount, 6); // USDC has 6 decimals
+            const amountInSmallestUnit = ethers.parseUnits(amount, 6); // USDC has 6 decimals
             
             const tx = await this.escrowContract.createEscrow(
                 buyerAddress,
                 sellerAddress,
-                amountInWei
+                amountInSmallestUnit
             );
             
             const receipt = await tx.wait();
-
-            if (!receipt) {
-                throw new Error("Transaction receipt not found");
-            }
+            if (!receipt) throw new Error("Transaction receipt not found");
             
-            const event = (receipt.logs as any[]).find((log) => {
+            const event = (receipt.logs as any[]).map(log => {
                 try {
-                    const parsedLog = this.escrowContract!.interface.parseLog(log);
-                    return parsedLog?.name === "EscrowCreated";
-                } catch (e) {
-                    // This log is not from our contract, ignore
-                    return false;
-                }
-            });
+                    return this.escrowContract!.interface.parseLog(log);
+                } catch(e) { return null; }
+            }).find(log => log?.name === "EscrowCreated");
             
-            if (!event) {
-                throw new Error("EscrowCreated event not found");
-            }
-            
-            const parsedLog = this.escrowContract.interface.parseLog(event);
-            const escrowId = parsedLog!.args.escrowId;
+            if (!event) throw new Error("EscrowCreated event not found in transaction logs");
             
             return {
-                escrowId,
+                escrowId: event.args.escrowId,
                 txHash: receipt.hash
             };
             
         } catch (error) {
-            console.error('Blockchain error:', error);
+            console.error('Blockchain error in createEscrow:', error);
             throw new Error('Failed to create escrow on blockchain');
         }
     }
     
-    async checkEscrowStatus(escrowId: string): Promise<any> {
-        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
-        try {
-            const escrowData = await this.escrowContract.getEscrow(escrowId);
-            const status = Number(escrowData.status);
-            const isFunded = status === 1; // 1 is the enum value for FUNDED
+    async fundEscrowAsUser(escrowId: string, amount: string, userPrivateKey: string): Promise<string> {
+        if (!this.isInitialized()) throw new Error('BlockchainService not initialized');
 
-            return {
-                buyer: escrowData.buyer,
-                seller: escrowData.seller,
-                amount: ethers.formatUnits(escrowData.amount, 6),
-                status: this.getStatusString(status),
-                autoReleaseTime: new Date(Number(escrowData.autoReleaseTime) * 1000),
-                disputeRaised: escrowData.disputeRaised,
-                isFunded: isFunded,
-            };
-            
-        } catch (error) {
-            console.error('Status check error:', error);
-            throw new Error('Failed to check escrow status');
-        }
-    }
-    
-    async releaseFunds(escrowId: string): Promise<string> {
-        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
-        try {
-            const tx = await this.escrowContract.ownerReleaseFunds(escrowId);
-            const receipt = await tx.wait();
-             if (!receipt) {
-                throw new Error("Transaction receipt not found for releaseFunds");
-            }
-            return receipt.hash;
-        } catch (error) {
-            console.error('Release funds error:', error);
-            throw new Error('Failed to release funds');
-        }
-    }
+        const userWallet = new ethers.Wallet(userPrivateKey, this.provider!);
+        const usdcContract = new ethers.Contract(process.env.USDC_CONTRACT_ADDRESS!, [
+            'function approve(address spender, uint256 amount) external returns (bool)',
+            'function allowance(address owner, address spender) external view returns (uint256)'
+        ], userWallet);
+        
+        const escrowContractAsUser = new ethers.Contract(process.env.ESCROW_CONTRACT_ADDRESS!, EscrowABI, userWallet);
 
-    async fundEscrow(escrowId: string): Promise<string> {
-        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
-            const tx = await this.escrowContract.fundEscrow(escrowId);
-            const receipt = await tx.wait();
-            if (!receipt) {
-                throw new Error("Transaction receipt not found for fundEscrow");
+            const amountInSmallestUnit = ethers.parseUnits(amount, 6);
+
+            // Approve spending
+            const currentAllowance = await usdcContract.allowance(userWallet.address, await escrowContractAsUser.getAddress());
+            if (currentAllowance < amountInSmallestUnit) {
+                const approveTx = await usdcContract.approve(await escrowContractAsUser.getAddress(), amountInSmallestUnit);
+                await approveTx.wait();
             }
+
+            // Fund escrow
+            const tx = await escrowContractAsUser.fundEscrow(escrowId);
+            const receipt = await tx.wait();
+            if (!receipt) throw new Error("Transaction receipt not found for fundEscrow");
             return receipt.hash;
         } catch (error) {
             console.error('Fund escrow error:', error);
-            throw new Error('Failed to fund escrow');
+            throw new Error('Failed to fund escrow as user');
+        }
+    }
+
+    async ownerReleaseFunds(escrowId: string): Promise<string> {
+        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
+        try {
+            // This function is called by the contract owner (service wallet)
+            const tx = await this.escrowContract.ownerReleaseFunds(escrowId);
+            const receipt = await tx.wait();
+            if (!receipt) throw new Error("Transaction receipt not found for ownerReleaseFunds");
+            return receipt.hash;
+        } catch (error) {
+            console.error('Owner release funds error:', error);
+            throw new Error('Failed to execute owner release of funds');
         }
     }
     
-    async raiseDispute(escrowId: string): Promise<string> {
-        if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
+    async raiseDispute(escrowId: string, userPrivateKey: string): Promise<string> {
+        if (!this.isInitialized()) throw new Error('BlockchainService not initialized');
+        const userWallet = new ethers.Wallet(userPrivateKey, this.provider!);
+        const escrowContractAsUser = new ethers.Contract(process.env.ESCROW_CONTRACT_ADDRESS!, EscrowABI, userWallet);
         try {
-            const tx = await this.escrowContract.raiseDispute(escrowId);
+            const tx = await escrowContractAsUser.raiseDispute(escrowId);
             const receipt = await tx.wait();
-             if (!receipt) {
-                throw new Error("Transaction receipt not found for raiseDispute");
-            }
+            if (!receipt) throw new Error("Transaction receipt not found for raiseDispute");
             return receipt.hash;
         } catch (error) {
             console.error('Raise dispute error:', error);
@@ -144,32 +124,16 @@ class BlockchainService {
         }
     }
     
-    async resolveDispute(
-        escrowId: string,
-        buyerPercentage: number
-    ): Promise<string> {
+    async resolveDispute(escrowId: string, buyerPercentage: number): Promise<string> {
         if (!this.isInitialized() || !this.escrowContract) throw new Error('BlockchainService not initialized');
         try {
             const tx = await this.escrowContract.resolveDispute(escrowId, buyerPercentage);
             const receipt = await tx.wait();
-             if (!receipt) {
-                throw new Error("Transaction receipt not found for resolveDispute");
-            }
+            if (!receipt) throw new Error("Transaction receipt not found for resolveDispute");
             return receipt.hash;
         } catch (error) {
             console.error('Resolve dispute error:', error);
             throw new Error('Failed to resolve dispute');
-        }
-    }
-    
-    async checkAutoRelease(escrowId: string): Promise<boolean> {
-        if (!this.isInitialized() || !this.escrowContract) return false;
-        try {
-            const escrow = await this.escrowContract.getEscrow(escrowId);
-            const now = Math.floor(Date.now() / 1000);
-            return Number(escrow.autoReleaseTime) <= now && Number(escrow.status) === 1; // FUNDED
-        } catch (error) {
-            return false;
         }
     }
     
@@ -178,22 +142,13 @@ class BlockchainService {
         try {
             const tx = await this.escrowContract.autoRelease(escrowId);
             const receipt = await tx.wait();
-             if (!receipt) {
-                throw new Error("Transaction receipt not found for autoRelease");
-            }
+            if (!receipt) throw new Error("Transaction receipt not found for autoRelease");
             return receipt.hash;
         } catch (error) {
             console.error('Auto-release error:', error);
             throw new Error('Failed to execute auto-release');
         }
     }
-    
-    private getStatusString(status: number): string {
-        const statuses = ['CREATED', 'FUNDED', 'COMPLETED', 'DISPUTED', 'REFUNDED', 'CANCELLED'];
-        return statuses[status] || 'UNKNOWN';
-    }
 }
 
 export default new BlockchainService();
-
-    

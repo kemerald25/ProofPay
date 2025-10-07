@@ -32,7 +32,6 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const body = Object.fromEntries(formData);
 
-  // Validate Twilio signature
   const twilioSignature = req.headers.get('X-Twilio-Signature') || '';
   const url = process.env.NEXT_PUBLIC_URL + '/api/whatsapp'; 
   const authToken = process.env.TWILIO_AUTH_TOKEN || '';
@@ -47,30 +46,25 @@ export async function POST(req: NextRequest) {
   const command = parts[0].toLowerCase();
   
   try {
-    // Handle create command separately as it has a different structure
-    if (originalMessage.startsWith('+')) {
-        await handleCreate(from, originalMessage);
-    } else {
-        const args = parts.slice(1);
-        const escrowId = args[0]; // Keep original case
+    const args = parts.slice(1);
+    const escrowId = args[0]; // Keep original case
 
-        switch (command) {
-          case 'confirm':
+    switch (command) {
+        case 'confirm':
             await handleConfirm(from, escrowId);
             break;
-          case 'dispute':
+        case 'dispute':
             await handleDispute(from, escrowId);
             break;
-          case 'help':
+        case 'help':
             await WhatsAppService.sendHelpMessage(from);
             break;
-          case 'history':
+        case 'history':
             await handleHistory(from);
             break;
-          default:
-            await WhatsAppService.sendMessage(from, 'Sorry, I\'ve received your message but didn\'t understand the command. Reply "help" for a list of commands.');
+        default:
+            await WhatsAppService.sendMessage(from, 'Sorry, I didn\'t understand that command. Reply "help" for a list of commands.');
             break;
-        }
     }
   } catch (error: any) {
     Sentry.captureException(error);
@@ -83,35 +77,6 @@ export async function POST(req: NextRequest) {
   });
 }
 
-
-async function handleCreate(from: string, message: string) {
-    // Format: +[buyer-phone] [amount] [seller-wallet] [item description]
-    const parts = message.split(' ');
-    if (parts.length < 4 || !parts[0].startsWith('+') || !parts[2].startsWith('0x')) {
-        throw new Error('Invalid format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
-    }
-    const buyerPhone = parts[0];
-    const amount = parseFloat(parts[1]);
-    const sellerWallet = parts[2];
-    const description = parts.slice(3).join(' ');
-
-    if (isNaN(amount) || !description || !sellerWallet) {
-        throw new Error('Invalid format. Use: +<buyer-phone> <amount> <seller-wallet> <item>');
-    }
-
-    const escrowData = await EscrowService.createEscrow({
-        sellerPhone: from,
-        buyerPhone,
-        amount,
-        description,
-        sellerWallet
-    });
-    
-    // Notify both parties
-    await WhatsAppService.sendEscrowCreatedToSeller(from, { ...escrowData, buyerPhone });
-    await WhatsAppService.sendPaymentRequestToBuyer(buyerPhone, escrowData);
-}
-
 async function handleConfirm(from: string, escrowId: string) {
   if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "confirm BP-123XYZ"');
   await EscrowService.releaseFunds(escrowId, from);
@@ -119,7 +84,6 @@ async function handleConfirm(from: string, escrowId: string) {
 
 async function handleDispute(from: string, escrowId: string) {
   if (!escrowId) throw new Error('Please provide an Escrow ID. e.g., "dispute BP-123XYZ"');
-  // A simple reason is used here. You could extend this to parse more complex reasons.
   await DisputeService.raiseDispute({ 
       escrowId: escrowId,
       raisedByPhone: from,

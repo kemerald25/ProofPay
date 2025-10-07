@@ -42,9 +42,9 @@ class WhatsAppService {
 💰 Amount: ${escrowData.amount} USDC
 🛍️ Item: ${escrowData.description}
 👤 Buyer: ${escrowData.buyerPhone}
-🔐 Escrow ID: ${escrowData.escrowId}
+🔐 Escrow ID: ${escrowId}
 
-I've notified the buyer. You'll receive payment once they send USDC to the escrow address.
+I've sent funding instructions to the buyer. You'll be notified once they've sent the payment to the secure escrow contract.
 
 Payment will auto-release in 7 days after funding. 🔒`;
         
@@ -54,24 +54,13 @@ Payment will auto-release in 7 days after funding. 🔒`;
     async sendPaymentRequestToBuyer(buyerPhone: string, escrowData: any) {
         const message = `💳 *Payment Request on BasePay*
 
-Seller is requesting payment:
+Seller has created an escrow for you:
 💰 Amount: ${escrowData.amount} USDC
 🛍️ Item: ${escrowData.description}
 🔐 Escrow ID: ${escrowData.escrowId}
 
-*HOW TO PAY:*
-1. Open your crypto wallet (e.g., Coinbase Wallet)
-2. Send exactly ${escrowData.amount} USDC on Base network to:
-
-\`${escrowData.paymentAddress}\`
-
-⚠️ *IMPORTANT:*
-• Network: Base
-• Token: USDC
-• Amount: Exactly ${escrowData.amount}
-
-Your payment is protected! 🔒
-Funds stay in escrow until you confirm delivery.
+*Your funds are protected!* 🔒
+Reply "fund ${escrowData.escrowId}" to transfer USDC from your BasePay wallet into the secure escrow.
 
 Need help? Reply "help"`;
         
@@ -83,20 +72,20 @@ Need help? Reply "help"`;
 
 ${amount} USDC is now secured in escrow! 🔒
 
-The seller will deliver your item. When you receive it, reply:
+The seller will now deliver your item. When you receive it, reply:
 "confirm ${escrowId}"
 
-Funds will auto-release in 7 days if no issues.
+Funds will auto-release in 7 days if there are no issues.
 
-Have a problem? Reply "dispute ${escrowId}"`;
+Problem? Reply "dispute ${escrowId}"`;
         
         const sellerMsg = `✅ *Payment Received!*
 
-${amount} USDC is now in escrow! 🔒
+${amount} USDC is now in escrow for your item! 🔒
 
-Deliver the item to the buyer. They'll confirm receipt and funds will be released to you.
+Please deliver the item to the buyer. They will confirm receipt, and your funds will be released.
 
-Funds auto-release in 7 days. 💰`;
+Funds will auto-release in 7 days. 💰`;
         
         return this.sendMessage(phone, role === 'buyer' ? buyerMsg : sellerMsg);
     }
@@ -106,11 +95,11 @@ Funds auto-release in 7 days. 💰`;
 
 Did you receive your ${description}?
 
-Reply "confirm ${escrowId}" to release payment to seller.
+Reply "confirm ${escrowId}" to release payment to the seller.
 
-⚠️ Funds auto-release in ${daysRemaining} day(s) if no response.
+⚠️ Funds will auto-release in ${daysRemaining} day(s) if no response.
 
-Problem? Reply "dispute ${escrowId}"`;
+Have a problem? Reply "dispute ${escrowId}"`;
         
         return this.sendMessage(buyerPhone, message);
     }
@@ -118,9 +107,9 @@ Problem? Reply "dispute ${escrowId}"`;
     async sendFundsReleased(sellerPhone: string, netAmount: number) {
         const message = `💰 *Funds Released!*
 
-You received: ${netAmount.toFixed(2)} USDC
+You have received: ${netAmount.toFixed(2)} USDC
 
-Check your wallet.
+Please check your wallet.
 
 Transaction complete! 🎉
 
@@ -132,16 +121,11 @@ Thanks for using BasePay! 🙏`;
     async sendDisputeRaised(phone: string, escrowId: string) {
         const message = `⚠️ *Dispute Raised*
 
-Escrow ID: ${escrowId}
+A dispute has been opened for Escrow ID: ${escrowId}
 
 An arbitrator will review this case within 24-48 hours.
 
-Please be ready to provide:
-• Photos/videos of the item
-• Communication history
-• Any other evidence
-
-We'll contact you soon. 📞`;
+Please be ready to provide any necessary evidence like photos, videos, or communication history. We will contact you if more information is needed. 📞`;
         
         return this.sendMessage(phone, message);
     }
@@ -149,9 +133,11 @@ We'll contact you soon. 📞`;
     async sendHelpMessage(phone: string) {
         const message = `🤖 *BasePay Help*
 
-*CREATE ESCROW (Seller):*
-+[buyer-phone] [amount] [item]
-Example: +1234567890 50 iPhone case
+*CREATE ESCROW (Dashboard only):*
+Use the web dashboard to create a new escrow transaction.
+
+*FUND ESCROW (Buyer):*
+fund [escrow-id]
 
 *CONFIRM DELIVERY (Buyer):*
 confirm [escrow-id]
@@ -159,7 +145,7 @@ confirm [escrow-id]
 *RAISE DISPUTE:*
 dispute [escrow-id]
 
-*MY TRANSACTIONS:*
+*VIEW TRANSACTIONS:*
 history
 
 Need more help? Visit our website.`;
