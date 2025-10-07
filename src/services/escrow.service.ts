@@ -120,13 +120,12 @@ class EscrowService {
         try {
             const escrow = await this.getEscrow(escrowId);
             if (!escrow) throw new Error('Escrow not found');
-            if (escrow.status === 'FUNDED') return;
             
             const blockchainStatus = await BlockchainService.checkEscrowStatus(
                 escrow.escrow_id
             );
             
-            if (blockchainStatus.isFunded) {
+            if (blockchainStatus.isFunded && escrow.status !== 'FUNDED') {
                 const { error } = await supabase.from('escrows').update({ status: 'FUNDED', funded_at: new Date().toISOString() }).eq('id', escrowId);
                 if (error) throw error;
                 

@@ -89,7 +89,7 @@ class BlockchainService {
                 status: this.getStatusString(status),
                 autoReleaseTime: new Date(Number(escrowData.autoReleaseTime) * 1000),
                 disputeRaised: escrowData.disputeRaised,
-                isFunded: status === 1, // Correctly check the numeric status
+                isFunded: status === 1,
             };
             
         } catch (error) {
