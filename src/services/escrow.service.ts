@@ -121,22 +121,25 @@ class EscrowService {
             const escrow = await this.getEscrow(escrowId);
             if (!escrow) throw new Error('Escrow not found');
             
+            // No need to re-check if already funded
+            if (escrow.status === 'FUNDED') return;
+
             const blockchainStatus = await BlockchainService.checkEscrowStatus(
                 escrow.escrow_id
             );
             
-            if (blockchainStatus.isFunded && escrow.status !== 'FUNDED') {
+            if (blockchainStatus.isFunded) {
                 const { error } = await supabase.from('escrows').update({ status: 'FUNDED', funded_at: new Date().toISOString() }).eq('id', escrowId);
                 if (error) throw error;
                 
                 await WhatsAppService.sendMessage(
                     escrow.seller_phone,
-                    `✅ Payment received! ${escrow.amount} is now in escrow. Deliver the item and buyer will confirm.`
+                    `✅ Payment received! ${escrow.amount} USDC is now in escrow. Deliver the item and buyer will confirm.`
                 );
                 
                 await WhatsAppService.sendMessage(
                     escrow.buyer_phone,
-                    `✅ Payment successful! ${escrow.amount} is secured in escrow. You'll receive the item soon. Reply "confirm ${escrowId}" when you receive it.`
+                    `✅ Payment successful! ${escrow.amount} USDC is secured in escrow. You'll receive the item soon. Reply "confirm ${escrowId}" when you receive it.`
                 );
             }
             
@@ -148,9 +151,10 @@ class EscrowService {
     
     async releaseFunds(escrowId: string, callingPhone: string) {
         try {
-            // First, ensure the payment status is up-to-date
+            // First, ensure the payment status is up-to-date from the blockchain
             await this.checkPaymentStatus(escrowId);
             
+            // Re-fetch the escrow to get the potentially updated status
             const escrow = await this.getEscrow(escrowId);
             
             if (!escrow) throw new Error('Escrow not found');
