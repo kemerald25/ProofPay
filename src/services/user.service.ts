@@ -21,7 +21,7 @@ class UserService {
     async getOrCreateUser(phoneNumber: string): Promise<User> {
         try {
             // First, check if user exists in our database
-            let { data: existingUser } = await supabase
+            const { data: existingUser } = await supabase
                 .from('users')
                 .select('*')
                 .eq('phone_number', phoneNumber)
@@ -57,8 +57,8 @@ class UserService {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    linked_accounts: [{ type: 'phone', number: phoneNumber }],
-                    wallets: [{ chain_type: 'ethereum' }]
+                    create_embedded_wallet: true,
+                    linked_accounts: [{ type: 'phone', number: phoneNumber }]
                 })
             });
 
@@ -116,12 +116,18 @@ class UserService {
         }
     }
     
-    async getUserByPhone(phoneNumber: string) {
-        const { data } = await supabase
+    async getUserByPhone(phoneNumber: string): Promise<User | null> {
+        const { data, error } = await supabase
             .from('users')
             .select('*')
             .eq('phone_number', phoneNumber)
             .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+            console.error('Error fetching user by phone:', error);
+            Sentry.captureException(error);
+            throw error;
+        }
         
         return data;
     }
