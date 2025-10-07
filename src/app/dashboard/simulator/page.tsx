@@ -2,13 +2,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, User, Bot, RefreshCw, Wallet, Send, FilePlus2, MessageSquarePlus } from 'lucide-react';
+import { Loader2, User, Bot, Wallet, Send, MessageSquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
 
 interface Message {
   from: 'user' | 'bot' | 'system';
@@ -16,7 +15,7 @@ interface Message {
   phone: string;
 }
 
-const CHAT_STORAGE_KEY = 'whatsapp-simulator-chat-v2';
+const CHAT_STORAGE_KEY = 'whatsapp-simulator-chat-v3';
 
 export default function WhatsAppSimulatorPage() {
   const [phone, setPhone] = useState('+15550001111');
@@ -24,12 +23,6 @@ export default function WhatsAppSimulatorPage() {
   const [chat, setChat] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
   
-  const [createStep, setCreateStep] = useState(1);
-  const [createPayload, setCreatePayload] = useState({ buyerPhone: '+15550002222', amount: '50', description: 'A beautiful widget'});
-  
-  const [fundEscrowId, setFundEscrowId] = useState('');
-  const [isFunding, setIsFunding] = useState(false);
-
   const { toast } = useToast();
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +51,8 @@ export default function WhatsAppSimulatorPage() {
   }
 
   const handleApiCall = async (endpoint: string, body: object, operationName: string) => {
-    addMessageToChat({ from: 'system', text: `⚙️  Calling ${operationName}...`, phone: 'System' });
+    addMessageToChat({ from: 'system', text: `⚙️  Executing ${operationName}...`, phone: 'System' });
+    setIsSending(true);
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -68,107 +62,38 @@ export default function WhatsAppSimulatorPage() {
 
       const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || result.details || `Operation failed with status ${response.status}`);
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || `Operation failed with status ${response.status}`);
       }
       
       const successText = result.message || `${operationName} successful.`;
-      addMessageToChat({ from: 'system', text: `✅ ${successText}`, phone: 'System' });
-
-      if (result.replies && Array.isArray(result.replies)) {
-        const botMessages: Message[] = result.replies.map((reply: any) => ({
-          from: 'bot',
-          text: reply.body,
-          phone: reply.to
-        }));
-        setChat(prev => [...prev, ...botMessages]);
-      }
+      addMessageToChat({ from: 'bot', text: successText, phone: 'BasePay Bot' });
       
       return result;
 
     } catch (error: any) {
       console.error(`Error during ${operationName}:`, error);
-      const errorText = `❌ Error during ${operationName}: ${error.message}`;
-      addMessageToChat({ from: 'system', text: errorText, phone: 'System' });
+      const errorText = `❌ Error: ${error.message}`;
+      addMessageToChat({ from: 'bot', text: errorText, phone: 'BasePay Bot' });
       toast({ variant: 'destructive', title: `Error: ${operationName}`, description: error.message });
       return null;
+    } finally {
+        setIsSending(false);
     }
   }
-
-
-  const handleFundEscrow = async () => {
-    if (!fundEscrowId.trim()) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Please enter an Escrow ID' });
-      return;
-    }
-    
-    // We need to know which user is funding, let's assume the current 'phone' input is the buyer.
-    if (!phone) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Please enter a "Your Phone Number" to act as the buyer.' });
-      return;
-    }
-
-    setIsFunding(true);
-    await handleApiCall('/api/escrow/fund', { escrowId: fundEscrowId, buyerPhone: phone }, 'Fund Escrow');
-    setIsFunding(false);
-  };
   
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !phone.trim()) return;
 
     addMessageToChat({ from: 'user', text: message, phone });
-    setIsSending(true);
-    
-    await handleApiCall('/api/simulator', { from: phone, message }, 'WhatsApp Command');
-    
+    await handleApiCall('/api/chat', { phone_number: phone, message: message, source: 'simulator' }, `Command: ${message}`);
     setMessage('');
-    setIsSending(false);
   };
 
-  const renderCreateStep = () => {
-    switch(createStep) {
-      case 1:
-        return (
-          <div className="space-y-2">
-            <Label htmlFor="buyerPhone">Buyer's WhatsApp Phone</Label>
-            <Input id="buyerPhone" value={createPayload.buyerPhone} onChange={(e) => setCreatePayload({...createPayload, buyerPhone: e.target.value})} placeholder="+14155552671" />
-          </div>
-        );
-      case 2:
-        return (
-          <div className="space-y-2">
-            <Label htmlFor="amount">Amount (USDC)</Label>
-            <Input id="amount" type="number" value={createPayload.amount} onChange={(e) => setCreatePayload({...createPayload, amount: e.target.value})} placeholder="50.00" />
-          </div>
-        );
-      case 3:
-        return (
-          <div className="space-y-2">
-            <Label htmlFor="description">Item Description</Label>
-            <Input id="description" value={createPayload.description} onChange={(e) => setCreatePayload({...createPayload, description: e.target.value})} placeholder="Vintage Leather Jacket" />
-          </div>
-        );
-      default:
-        return null;
-    }
-  }
-
-  const handleCreateNext = async () => {
-    if (createStep < 3) {
-      setCreateStep(prev => prev + 1);
-    } else {
-        // Final step: submit
-        setIsSending(true);
-        const fullMessage = `${createPayload.buyerPhone} ${createPayload.amount} ${createPayload.description}`;
-        addMessageToChat({ from: 'user', text: `(Sent via UI) Create Escrow:\n- To: ${createPayload.buyerPhone}\n- Amount: ${createPayload.amount}\n- Item: ${createPayload.description}`, phone: phone });
-        
-        await handleApiCall('/api/simulator', { from: phone, message: fullMessage }, 'Create Escrow');
-        
-        // Reset
-        setCreateStep(1);
-        setIsSending(false);
-    }
+  const handleQuickAction = async (command: string, name: string) => {
+    addMessageToChat({ from: 'user', text: command, phone });
+    await handleApiCall('/api/chat', { phone_number: phone, message: command, source: 'simulator' }, name);
   }
 
   return (
@@ -187,16 +112,16 @@ export default function WhatsAppSimulatorPage() {
                 <div key={index} className={`flex items-start gap-3 ${msg.from === 'user' ? 'justify-end' : ''}`}>
                   {msg.from !== 'user' && (
                     <div className="flex-shrink-0">
-                      {msg.from === 'bot' ? <Bot className="h-8 w-8 text-primary" /> : <div className="w-8 h-8 flex items-center justify-center bg-slate-200 rounded-full"><RefreshCw className="h-4 w-4 text-slate-500"/></div>}
+                      {msg.from === 'bot' ? <Bot className="h-8 w-8 text-primary" /> : <Wallet className="h-8 w-8 text-slate-400"/>}
                     </div>
                   )}
                   <div className={cn(
                     "rounded-lg p-3 max-w-md",
                      msg.from === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary',
-                     msg.from === 'system' && 'bg-blue-50 text-blue-800 text-xs'
+                     msg.from === 'system' && 'bg-blue-50 text-blue-800 text-xs w-full text-center'
                   )}>
                     <p className="text-sm font-medium whitespace-pre-wrap">{msg.text}</p>
-                    <p className="text-xs opacity-70 mt-1">{msg.phone}</p>
+                    <p className="text-xs opacity-70 mt-1">{msg.from !== 'system' ? msg.phone : ''}</p>
                   </div>
                   {msg.from === 'user' && <User className="h-8 w-8 text-secondary-foreground" />}
                 </div>
@@ -216,63 +141,10 @@ export default function WhatsAppSimulatorPage() {
         </div>
 
         <div className="space-y-6">
-
-          {/* Create Escrow Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><FilePlus2/>Create Escrow</CardTitle>
-              <CardDescription>Simulate a seller creating an escrow. You are the seller.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <div className={cn("h-6 w-6 rounded-full flex items-center justify-center", createStep >= 1 ? "bg-primary text-primary-foreground" : "bg-secondary")}>1</div>
-                    <Separator className={cn("flex-1", createStep > 1 && "bg-primary")}/>
-                    <div className={cn("h-6 w-6 rounded-full flex items-center justify-center", createStep >= 2 ? "bg-primary text-primary-foreground" : "bg-secondary")}>2</div>
-                     <Separator className={cn("flex-1", createStep > 2 && "bg-primary")}/>
-                    <div className={cn("h-6 w-6 rounded-full flex items-center justify-center", createStep >= 3 ? "bg-primary text-primary-foreground" : "bg-secondary")}>3</div>
-                </div>
-                {renderCreateStep()}
-              </div>
-            </CardContent>
-            <CardFooter>
-               <Button onClick={handleCreateNext} disabled={isSending} className="w-full">
-                {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {createStep === 3 ? "Create Escrow" : "Next Step"}
-              </Button>
-            </CardFooter>
-          </Card>
-
-          {/* Fund Escrow Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Wallet/>Fund Escrow</CardTitle>
-              <CardDescription>Simulate a buyer funding an escrow from their generated wallet.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label htmlFor="fundEscrowId">Escrow ID</Label>
-                <Input
-                  id="fundEscrowId"
-                  value={fundEscrowId}
-                  onChange={e => setFundEscrowId(e.target.value)}
-                  placeholder="e.g. BPCABCDE"
-                  disabled={isFunding}
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleFundEscrow} disabled={isFunding || !fundEscrowId.trim()} className="w-full">
-                {isFunding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Fund from Buyer's Wallet"}
-              </Button>
-            </CardFooter>
-          </Card>
-          
-          {/* Manual Command */}
           <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><MessageSquarePlus/>Send Command</CardTitle>
-                 <CardDescription>Send a raw WhatsApp command like `confirm`, `dispute`, or `history`.</CardDescription>
+                 <CardDescription>Send a raw WhatsApp command.</CardDescription>
             </CardHeader>
             <CardContent>
                <form onSubmit={handleSendMessage} className="space-y-2">
@@ -282,7 +154,7 @@ export default function WhatsAppSimulatorPage() {
                     id="message"
                     value={message}
                     onChange={e => setMessage(e.target.value)}
-                    placeholder='e.g., confirm BPXHJP4U'
+                    placeholder='e.g., /createwallet'
                     disabled={isSending}
                   />
                   <Button type="submit" disabled={isSending} size="icon">
@@ -290,6 +162,23 @@ export default function WhatsAppSimulatorPage() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+
+           <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">Quick Actions</CardTitle>
+                 <CardDescription>Common commands for the active phone number.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+               <Button onClick={() => handleQuickAction('/createwallet', 'Create Wallet')} disabled={isSending} variant="outline">
+                    {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
+                    Create Wallet
+                </Button>
+                <Button onClick={() => handleQuickAction('/balance', 'Check Balance')} disabled={isSending} variant="outline">
+                    {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
+                    Check Balance
+                </Button>
             </CardContent>
           </Card>
 

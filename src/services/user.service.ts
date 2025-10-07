@@ -1,25 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
-import { ethers } from 'ethers';
 import { Sentry } from '@/config/sentry';
+import { PrivyClient } from '@privy-io/server-auth';
+import { Web3Storage, File } from 'web3.storage';
 
 const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_KEY!
 );
 
-// A simple (and not production-safe) encryption for the demo.
-// In a real app, use a dedicated KMS.
-function simpleEncrypt(text: string, secret: string): string {
-    return text.split('').map((char, i) => {
-        return String.fromCharCode(char.charCodeAt(0) + secret.charCodeAt(i % secret.length));
-    }).join('');
-}
+const privy = new PrivyClient(process.env.PRIVY_APP_ID!, process.env.PRIVY_APP_SECRET!);
 
-function simpleDecrypt(text: string, secret: string): string {
-    return text.split('').map((char, i) => {
-        return String.fromCharCode(char.charCodeAt(0) - secret.charCodeAt(i % secret.length));
-    }).join('');
-}
+const web3Storage = new Web3Storage({ token: process.env.WEB3_STORAGE_TOKEN! });
 
 
 class UserService {
@@ -32,30 +23,58 @@ class UserService {
                 .eq('phone_number', phoneNumber)
                 .single();
             
-            if (existing) return existing;
+            if (existing) {
+                 // Even if user exists, we get their latest wallet info from Privy
+                 const privyUser = await privy.getUser(existing.privy_user_id);
+                 if (!privyUser.wallet) {
+                     // This case might happen if wallet was unlinked. We can try to relink or create.
+                     await privy.linkPhone({userId: privyUser.id, phone: phoneNumber});
+                 }
+                 const wallet = privyUser.wallet || (await privy.createWallet({userId: privyUser.id}));
+
+                 if (wallet.address !== existing.wallet_address) {
+                     const { data: updatedUser } = await supabase.from('users').update({ wallet_address: wallet.address }).eq('id', existing.id).select().single();
+                     return updatedUser;
+                 }
+                return existing;
+            }
             
-            // Create new wallet
-            const wallet = ethers.Wallet.createRandom();
-            const encryptionKey = process.env.ENCRYPTION_KEY;
-            if (!encryptionKey) {
-                throw new Error("ENCRYPTION_KEY environment variable is not set.");
+            // Create new user with Privy
+            const privyUser = await privy.getOrCreateUser({ create: { phone: phoneNumber } });
+            
+            if (!privyUser.wallet) {
+                await privy.createWallet({userId: privyUser.id});
+            }
+            
+            const wallet = await privy.getUser(privyUser.id).then(u => u.wallet);
+
+            if (!wallet) {
+                throw new Error("Failed to create or retrieve Privy wallet.");
             }
 
-            const encryptedPrivateKey = simpleEncrypt(wallet.privateKey, encryptionKey);
-
-            // Create new user
+            // Create new user in our database
             const { data: newUser, error } = await supabase
                 .from('users')
                 .insert({
                     phone_number: phoneNumber,
-                    username: `user_${phoneNumber.slice(-4)}`,
+                    privy_user_id: privyUser.id,
                     wallet_address: wallet.address,
-                    private_key: encryptedPrivateKey, // Store encrypted key
                 })
                 .select()
                 .single();
             
             if (error) throw error;
+
+            // Upload metadata to IPFS
+            try {
+                const metadata = { phoneNumber, walletAddress: wallet.address, createdAt: new Date().toISOString() };
+                const cid = await web3Storage.put([new File([JSON.stringify(metadata)], 'wallet.json')]);
+                await supabase.from('users').update({ ipfs_cid: cid }).eq('id', newUser.id);
+                newUser.ipfs_cid = cid;
+            } catch (ipfsError) {
+                console.error("IPFS upload failed, continuing without it:", ipfsError);
+                Sentry.captureException(ipfsError);
+            }
             
             return newUser;
         } catch(error) {
@@ -63,48 +82,6 @@ class UserService {
             console.error("Error in getOrCreateUser:", error);
             throw error;
         }
-    }
-    
-    async updateWalletAddress(userId: string, walletAddress: string) {
-        await supabase
-            .from('users')
-            .update({ wallet_address: walletAddress })
-            .eq('id', userId);
-    }
-    
-    async incrementTransactionCount(userId: string, successful: boolean = true) {
-        const { data: user } = await supabase
-            .from('users')
-            .select('total_transactions, successful_transactions')
-            .eq('id', userId)
-            .single();
-        
-        if (!user) return;
-        
-        await supabase
-            .from('users')
-            .update({
-                total_transactions: user.total_transactions + 1,
-                successful_transactions: successful ? user.successful_transactions + 1 : user.successful_transactions
-            })
-            .eq('id', userId);
-    }
-    
-    async incrementDisputeCount(userId: string) {
-        const { data: user } = await supabase
-            .from('users')
-            .select('dispute_count')
-            .eq('id', userId)
-            .single();
-        
-        if (!user) return;
-        
-        await supabase
-            .from('users')
-            .update({
-                dispute_count: user.dispute_count + 1
-            })
-            .eq('id', userId);
     }
     
     async getUserByPhone(phoneNumber: string) {
@@ -115,23 +92,6 @@ class UserService {
             .single();
         
         return data;
-    }
-
-    async getDecryptedPrivateKey(userId: string): Promise<string> {
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('private_key')
-            .eq('id', userId)
-            .single();
-
-        if (error || !user) throw new Error("User not found to get private key.");
-
-        const encryptionKey = process.env.ENCRYPTION_KEY;
-        if (!encryptionKey) {
-            throw new Error("ENCRYPTION_KEY environment variable is not set.");
-        }
-        
-        return simpleDecrypt(user.private_key, encryptionKey);
     }
 }
 

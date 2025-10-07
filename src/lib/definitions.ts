@@ -1,15 +1,10 @@
 export type User = {
-    id: string;
+    id: string; // uuid from supabase
+    privy_user_id: string;
     phone_number: string;
-    wallet_address: string; // Made mandatory
-    private_key: string;    // Added to store encrypted private key
-    username?: string;
+    wallet_address: string;
+    ipfs_cid?: string;
     created_at: string;
-    total_transactions: number;
-    successful_transactions: number;
-    dispute_count: number;
-    reputation_score: number;
-    is_verified: boolean;
 };
 
 export type Escrow = {
@@ -19,7 +14,7 @@ export type Escrow = {
     seller_id: string;
     buyer_phone: string;
     seller_phone: string;
-    buyer_wallet: string; // Made mandatory
+    buyer_wallet: string;
     seller_wallet: string;
     amount: string;
     status: 'CREATED' | 'FUNDED' | 'COMPLETED' | 'DISPUTED' | 'REFUNDED' | 'CANCELLED';
