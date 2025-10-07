@@ -25,15 +25,10 @@ class EscrowService {
             const buyer = await UserService.getOrCreateUser(params.buyerPhone);
             
             // Validate seller has wallet
-            if (!params.sellerWallet && !seller.wallet_address) {
-                // In a real app, you might ask the user to register their wallet first.
-                // For the simulator, we accept a placeholder.
-                if (process.env.NODE_ENV !== 'development' || !params.sellerWallet?.includes('0x0000000')) {
-                     throw new Error('Seller must provide wallet address or register one.');
-                }
+            const sellerWallet = params.sellerWallet || seller.wallet_address;
+            if (!sellerWallet) {
+                 throw new Error('Seller must provide a wallet address.');
             }
-            
-            const sellerWallet = params.sellerWallet || seller.wallet_address!;
             
             // If the user's wallet was just registered, update it
             if (params.sellerWallet && !seller.wallet_address) {
