@@ -46,8 +46,11 @@ class BlockchainListener {
         }
 
         try {
+            // The first argument to the filter corresponds to the first indexed event parameter (escrowId).
+            // Ethers.js expects an array of values for the 'in' condition.
             const eventFilter = this.escrowContract.filters.EscrowFunded(escrowIds);
 
+            // Check a reasonable range of recent blocks. e.g., last day on Base Sepolia (approx 43200 blocks)
             const fromBlock = await this.provider!.getBlockNumber() - 43200;
 
             const logs = await this.escrowContract.queryFilter(eventFilter, fromBlock, 'latest');
