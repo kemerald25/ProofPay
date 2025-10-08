@@ -1,3 +1,5 @@
+
+import 'dotenv/config';
 import { NextRequest, NextResponse } from 'next/server';
 import EscrowService from '@/services/escrow.service';
 import UserService from '@/services/user.service';
@@ -10,10 +12,10 @@ async function sendPrivyTransaction(
     walletAddress: string,
     transactionData: { to: string; data: string; value?: string }
 ) {
-    const privyAppId = process.env.PRIVY_APP_ID! || "cmgh540910017l50ctwq2f856";
-    const privyAppSecret = process.env.PRIVY_APP_SECRET! || "nG6sS2PC632ASUTw4WrToChhxaEDXhoZz8dArWR2npkPFJmG5SwpRQwrRFm6QBcivMxnXr2d3EmEkkqgVCoCSN5";
+    const privyAppId = process.env.PRIVY_APP_ID!;
+    const privyAppSecret = process.env.PRIVY_APP_SECRET!;
     const authHeader = 'Basic ' + Buffer.from(privyAppId + ':' + privyAppSecret).toString('base64');
-    const chainId = process.env.CHAIN_ID || 'eip155:84532'; // Default to Base Sepolia
+    const chainId = process.env.BASE_CHAIN_ID || 'eip155:84532'; // Default to Base Sepolia
 
     const response = await fetch(`https://api.privy.io/v1/wallets/${walletAddress}/rpc`, {
         method: 'POST',
