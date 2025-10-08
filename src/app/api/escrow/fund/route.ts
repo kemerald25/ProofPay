@@ -21,8 +21,8 @@ async function sendPrivyTransaction(
         method: 'POST',
         headers: {
             'Authorization': authHeader,
-            'privy-app-id': privyAppId,
             'Content-Type': 'application/json',
+            'privy-app-id': privyAppId,
         },
         body: JSON.stringify({
             method: 'eth_sendTransaction',
