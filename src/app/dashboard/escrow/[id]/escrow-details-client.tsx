@@ -19,6 +19,7 @@ import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { Check, Clock, Copy, ShieldAlert, User, Milestone, Send, Bot, Wallet, MessageSquarePlus, Loader2, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
+import { SetupDelegatedAccess } from '@/components/SetupDelegatedAccess';
 
 interface Message {
   from: 'user' | 'bot' | 'system';
@@ -187,8 +188,9 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
                             </Button>
                         </CardFooter>
                     )}
+                  
                 </Card>
-                
+                <SetupDelegatedAccess />
                 <Card>
                     <CardHeader>
                         <CardTitle>Timeline</CardTitle>
@@ -200,6 +202,7 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
                         <TimelineStep title="Funds Released" timestamp={escrow.completed_at} isCompleted={!!escrow.completed_at} isLast={true} />
                     </CardContent>
                 </Card>
+              
             </main>
             <aside className="space-y-6">
                 <Card className="flex-1 flex flex-col max-h-[calc(100vh-150px)]">
@@ -255,6 +258,7 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
                         </form>
                     </div>
                 </Card>
+                <SetupDelegatedAccess />
             </aside>
         </div>
     </div>
