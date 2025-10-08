@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { Sentry } from '@/config/sentry';
 import { PrivyClient } from '@privy-io/server-auth';
@@ -28,7 +29,7 @@ class UserService {
             },
             body: JSON.stringify({
                 linked_accounts: [{ type: 'phone', number: phoneNumber }],
-                wallets: [{ chain_type: 'ethereum', "chain_id": "eip155:84532" }]
+                wallets: [{ chain_type: 'ethereum' }] // REMOVED invalid chain_id
             })
         });
 
