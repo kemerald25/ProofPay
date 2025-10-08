@@ -8,6 +8,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import type { Escrow } from '@/lib/definitions';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
-import { Check, Clock, Copy, ShieldAlert, User, Milestone, Send, Bot, Wallet, MessageSquarePlus, Loader2 } from 'lucide-react';
+import { Check, Clock, Copy, ShieldAlert, User, Milestone, Send, Bot, Wallet, MessageSquarePlus, Loader2, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 
@@ -63,6 +64,7 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
   const [message, setMessage] = useState('');
   const [chat, setChat] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [isFunding, setIsFunding] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatStorageKey = `${CHAT_STORAGE_KEY_PREFIX}${escrow.id}`;
 
@@ -99,9 +101,9 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
     setChat(prev => [...prev, msg]);
   }
 
-  const handleApiCall = async (endpoint: string, body: object, operationName: string) => {
+  const handleApiCall = async (endpoint: string, body: object, operationName: string, setLoading?: React.Dispatch<React.SetStateAction<boolean>>) => {
     addMessageToChat({ from: 'system', text: `⚙️  Executing ${operationName}...`, phone: 'System' });
-    setIsSending(true);
+    if(setLoading) setLoading(true);
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -109,8 +111,8 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
         body: JSON.stringify(body),
       });
       const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || `Operation failed with status ${response.status}`);
+      if (!response.ok || result.error || !result.success) {
+        throw new Error(result.error || result.message || `Operation failed with status ${response.status}`);
       }
       const successText = result.message || `${operationName} successful.`;
       addMessageToChat({ from: 'bot', text: successText, phone: 'BasePay Bot' });
@@ -121,7 +123,7 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
       toast({ variant: 'destructive', title: `Error: ${operationName}`, description: error.message });
       return null;
     } finally {
-        setIsSending(false);
+        if(setLoading) setLoading(false);
     }
   }
 
@@ -129,9 +131,19 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
     e.preventDefault();
     if (!message.trim() || !phone.trim()) return;
     addMessageToChat({ from: 'user', text: message, phone });
-    await handleApiCall('/api/chat', { phone_number: phone, message, source: 'simulator' }, `Command: ${message}`);
+    await handleApiCall('/api/chat', { phone_number: phone, message, source: 'simulator' }, `Command: ${message}`, setIsSending);
     setMessage('');
   };
+
+  const handleFundEscrow = async () => {
+    await handleApiCall(
+        '/api/escrow/fund', 
+        { escrowId: escrow.id, buyerPhone: escrow.buyer_phone }, 
+        'Fund Escrow', 
+        setIsFunding
+    );
+    // You might want to refresh the escrow data here
+  }
 
   const autoReleaseDistance = escrow.auto_release_time ? formatDistanceToNow(parseISO(escrow.auto_release_time), { addSuffix: true }) : '';
 
@@ -167,6 +179,14 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
                             <span className="font-medium text-amber-600">{autoReleaseDistance}</span>
                         </div>
                     </CardContent>
+                    {escrow.status === 'CREATED' && (
+                        <CardFooter>
+                            <Button onClick={handleFundEscrow} disabled={isFunding}>
+                                {isFunding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4"/> }
+                                Fund Escrow Now
+                            </Button>
+                        </CardFooter>
+                    )}
                 </Card>
                 
                 <Card>
@@ -185,7 +205,7 @@ export default function EscrowDetailsClient({ escrow }: { escrow: Escrow }) {
                 <Card className="flex-1 flex flex-col max-h-[calc(100vh-150px)]">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><MessageSquarePlus/> Chat Simulator</CardTitle>
-                        <CardDescription>Simulate messages between buyer and seller.</CardDescription>
+                        <CardDescription>Simulate messages between buyer and seller for this specific escrow.</CardDescription>
                     </CardHeader>
                      <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
                         {chat.map((msg, index) => (
