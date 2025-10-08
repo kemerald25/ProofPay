@@ -12,8 +12,13 @@ async function sendPrivyTransaction(
     walletAddress: string,
     transactionData: { to: string; data: string; value?: string }
 ) {
-    const privyAppId = process.env.PRIVY_APP_ID!;
-    const privyAppSecret = process.env.PRIVY_APP_SECRET!;
+    const privyAppId = process.env.PRIVY_APP_ID;
+    const privyAppSecret = process.env.PRIVY_APP_SECRET;
+
+    if (!privyAppId || !privyAppSecret) {
+        throw new Error('Privy credentials are not set in environment variables.');
+    }
+
     const authHeader = 'Basic ' + Buffer.from(privyAppId + ':' + privyAppSecret).toString('base64');
     const chainId = process.env.BASE_CHAIN_ID || 'eip155:84532'; // Default to Base Sepolia
 
@@ -21,8 +26,8 @@ async function sendPrivyTransaction(
         method: 'POST',
         headers: {
             'Authorization': authHeader,
-            'Content-Type': 'application/json',
             'privy-app-id': privyAppId,
+            'Content-Type': 'application/json',
         },
         body: JSON.stringify({
             method: 'eth_sendTransaction',
