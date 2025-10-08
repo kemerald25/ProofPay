@@ -19,12 +19,12 @@ class EscrowService {
     }) {
         try {
             // Ensure both users exist and have wallets before proceeding
-            const seller = await UserService.getUserByPhone(params.sellerPhone);
+            const seller = await UserService.findUserByPhone(params.sellerPhone);
             if (!seller || !seller.wallet_address) {
                 throw new Error(`Seller with phone ${params.sellerPhone} not found or has no wallet. Please create a wallet for this user first.`);
             }
 
-            const buyer = await UserService.getUserByPhone(params.buyerPhone);
+            const buyer = await UserService.findUserByPhone(params.buyerPhone);
             if (!buyer || !buyer.wallet_address) {
                 throw new Error(`Buyer with phone ${params.buyerPhone} not found or has no wallet. Please have them create a wallet first.`);
             }

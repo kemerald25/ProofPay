@@ -28,7 +28,7 @@ class UserService {
             },
             body: JSON.stringify({
                 linked_accounts: [{ type: 'phone', number: phoneNumber }],
-                 wallets: [{ chain_type: 'ethereum' }]
+                wallets: [{ chain_type: 'ethereum', "chain_id": "eip155:84532" }]
             })
         });
 
@@ -99,6 +99,22 @@ class UserService {
     }
     
     async getUserByPhone(phoneNumber: string): Promise<User | null> {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('phone_number', phoneNumber)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+            console.error('Error fetching user by phone from Supabase:', error);
+            Sentry.captureException(error);
+            throw error;
+        }
+        
+        return data;
+    }
+
+    async findUserByPhone(phoneNumber: string): Promise<User | null> {
         const { data, error } = await supabase
             .from('users')
             .select('*')
